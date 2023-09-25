@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["schleich.cdaniel@gmail.com"]
 categories = ["Webassembly"]
-keywords = ["Webassembly", "wasm", "neural-network", "inference","yolo"]
+keywords = ["Webassembly", "wasm", "neural-network", "inference", "yolo"]
 readme = "README.md"
 repository = "https://github.com/WasmEdge/mediapipe-rs"
 description = "A Rust library for YOLO vision models"
@@ -14,6 +14,7 @@ publish = true
 
 [dependencies]
 wasi-nn = "0.6.0"
+thiserror = "1.0.48"
 image = { version = "0.24.7", default-features = false, features = [
     "gif",
     "jpeg",
@@ -29,3 +30,7 @@ image = { version = "0.24.7", default-features = false, features = [
     "dds",
     "farbfeld",
 ] }
+
+
+[dev-dependencies]
+clap = { version = "4.4.4", features = ["derive"] }
