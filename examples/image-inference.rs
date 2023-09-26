@@ -41,8 +41,8 @@ pub fn main() {
 
     // Run inference
     let vec_result = yolo.infer(conf_thresh, iou_thresh, &rgb_image).unwrap();
+    println!("{:?}", vec_result);
 
-    //
     let output_image = draw_bounding_boxes_to_image(rgb_image, vec_result);
 
     output_image
