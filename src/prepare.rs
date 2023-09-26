@@ -5,25 +5,30 @@ const SIZE: usize = 640;
 const SIZE_U32: u32 = 640;
 type Channel = Vec<Vec<f32>>;
 
-pub(crate) fn pre_process_image(image: RgbImage) -> [Channel; 3] {
-    // let mut file_img = File::open(path).unwrap();
-    // let mut img_buf = Vec::new();
-    // file_img.read_to_end(&mut img_buf).unwrap();
-    // let img = image::load_from_memory(&img_buf).unwrap().to_rgb8();
+#[derive(Debug)]
+pub struct ResizeScale(pub f32);
+
+pub(crate) fn pre_process_image(image: &RgbImage) -> ([Channel; 3], ResizeScale) {
+    let input_width = image.width();
+    let input_height = image.height();
 
     let (height, width);
-    if image.width() > image.height() {
+    let length = input_height.max(input_width) as f32;
+    let resize_scale = ResizeScale(length / SIZE as f32);
+    println!("scale {:?}", resize_scale);
+
+    if input_width > input_height {
         // height is the shorter length
-        height = SIZE_U32 * image.height() / image.width();
+        height = SIZE_U32 * input_height / input_width;
         width = SIZE_U32;
     } else {
         // width is the shorter length
-        width = SIZE_U32 * image.width() / image.height();
+        width = SIZE_U32 * input_width / input_height;
         height = SIZE_U32;
     }
 
     let resized: image::ImageBuffer<image::Rgb<u8>, Vec<u8>> = image::imageops::resize(
-        &image,
+        image,
         width,
         height,
         ::image::imageops::FilterType::Triangle,
@@ -54,5 +59,5 @@ pub(crate) fn pre_process_image(image: RgbImage) -> [Channel; 3] {
     let final_tensor: [Vec<Vec<f32>>; 3];
     final_tensor = [red, green, blue];
 
-    final_tensor
+    (final_tensor, resize_scale)
 }

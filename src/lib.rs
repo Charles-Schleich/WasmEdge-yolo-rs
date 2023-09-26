@@ -1,17 +1,23 @@
 use std::{fs, io, path::Path};
 
-use image::GenericImage;
+use image::RgbImage;
+use imageproc::rect::Rect;
+use prepare::ResizeScale;
+use process::{apply_conf_and_nms, apply_confidence_and_scale, process_output_buffer_to_tensor};
 use wasi_nn::{ExecutionTarget, Graph, GraphEncoding};
 mod prepare;
+pub mod process;
 
 pub struct Yolo {
     // inference_type: YoloType
     graph: Graph,
     classes: Vec<String>,
 }
-
-pub struct InferenceResult;
-
+pub enum YoloType {
+    Pose,
+    Segment,
+    Detection,
+}
 #[derive(thiserror::Error, Debug)]
 pub enum RuntimeError {
     #[error("image error")]
@@ -29,24 +35,54 @@ const INPUT_HEIGHT: usize = 640;
 const OUTPUT_CLASSES: usize = 80;
 const OUTPUT_OBJECTS: usize = 8400;
 
+pub struct ConfThresh(pub f32);
+
+impl ConfThresh {
+    pub fn new(conf: f32) -> Self {
+        Self(conf)
+    }
+}
+
+pub struct IOUThresh(pub f32);
+
+impl IOUThresh {
+    pub fn new(conf: f32) -> Self {
+        Self(conf)
+    }
+}
+
 impl Yolo {
     /// Creates a new instance of YOLO, including graph and classes
     pub fn new(graph: Graph, classes: Vec<String>) -> Self {
         Yolo { graph, classes }
     }
 
+    // Convienence function to run load file and poarse as image
+    fn load_image_from_file<P: AsRef<Path>>(image_path: P) -> Result<RgbImage, RuntimeError> {
+        let path = image_path.as_ref();
+        let image_bytes = fs::read(path)?;
+        Ok(image::load_from_memory(&image_bytes)?.to_rgb8())
+    }
+
     pub fn infer_file<P: AsRef<Path>>(
         self,
         image_path: P,
-    ) -> Result<InferenceResult, RuntimeError>
-// where
-        // P: AsRef<std::path::PathBuf>,
-    {
-        let path = image_path.as_ref();
-        let image_bytes = fs::read(path)?;
-        let image_buffer = image::load_from_memory(&image_bytes).unwrap().to_rgb8();
+        conf_thresh: ConfThresh,
+        iou_thresh: IOUThresh,
+    ) -> Result<Vec<InferenceResult>, RuntimeError> {
+        let image_buffer = Yolo::load_image_from_file(image_path)?;
+        self.infer(conf_thresh, iou_thresh, &image_buffer)
+    }
 
-        let bytes: [Vec<Vec<f32>>; 3] = prepare::pre_process_image(image_buffer);
+    pub fn infer(
+        self,
+        conf_thresh: ConfThresh,
+        iou_thresh: IOUThresh,
+        image_buffer: &RgbImage,
+    ) -> Result<Vec<InferenceResult>, RuntimeError> {
+        let (bytes, resize_scale): ([Vec<Vec<f32>>; 3], ResizeScale) =
+            prepare::pre_process_image(image_buffer);
+
         let tensor_data = bytes
             .into_iter()
             .flatten()
@@ -72,7 +108,12 @@ impl Yolo {
         context.compute().unwrap();
         context.get_output(0, &mut output_buffer)?;
 
-        Ok(InferenceResult)
+        // Process inference results into Vector of Results
+        let output_tensor = process_output_buffer_to_tensor(&output_buffer);
+        let vec_results =
+            apply_confidence_and_scale(output_tensor, conf_thresh, self.classes, resize_scale);
+
+        Ok(vec_results)
     }
 }
 
@@ -82,19 +123,10 @@ pub enum BuildError {
     MissingClasses,
 
     #[error("error creating Graph")]
-    GraphError(wasi_nn::Error),
-}
+    GraphError(#[from] wasi_nn::Error),
 
-impl From<wasi_nn::Error> for BuildError {
-    fn from(value: wasi_nn::Error) -> Self {
-        BuildError::GraphError(value)
-    }
-}
-
-pub enum YoloType {
-    Pose,
-    Segment,
-    Detection,
+    #[error("error reading file containing classes")]
+    FileError(#[from] std::io::Error),
 }
 
 pub struct YoloBuilder {
@@ -132,6 +164,23 @@ impl YoloBuilder {
         self
     }
 
+    /// Function that takes a path to a classes text file,
+    /// each class is separated by a newline
+    #[inline(always)]
+    pub fn classes_file<P>(mut self, classes_path: P) -> Result<Self, BuildError>
+    where
+        P: AsRef<std::path::Path>,
+    {
+        let path = classes_path.as_ref();
+        let classes = fs::read_to_string(path)?
+            .lines()
+            .map(String::from)
+            .collect::<Vec<String>>();
+
+        self.classes = Some(classes);
+        Ok(self)
+    }
+
     #[inline(always)]
     pub fn build_from_bytes<B>(self, bytes_array: impl AsRef<[B]>) -> Result<Yolo, BuildError>
     where
@@ -161,5 +210,21 @@ impl YoloBuilder {
             }
             None => Err(BuildError::MissingClasses),
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct InferenceResult {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+    class: String,
+    confidence: f32,
+}
+
+impl From<InferenceResult> for Rect {
+    fn from(value: InferenceResult) -> Self {
+        Rect::at(value.x as i32, value.y as i32).of_size(value.width, value.height)
     }
 }
