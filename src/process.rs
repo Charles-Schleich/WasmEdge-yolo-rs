@@ -3,6 +3,7 @@ use crate::{ConfThresh, IOUThresh, InferenceResult};
 use image::{Rgb, RgbImage};
 use imageproc::drawing::draw_hollow_rect_mut;
 use imageproc::rect::Rect;
+use ndarray::{array, s, Array, Array2, ArrayView, Axis, Dim, Zip};
 
 /// Function to process output tensor from YOLOv8 Detection Model
 /// TODO: more efficient parsing: remove transpose convert from buffer directly to
@@ -58,10 +59,7 @@ pub(crate) fn apply_confidence_and_scale(
         let h = (raw_h * scale.0).round() as u32;
 
         results.push(InferenceResult {
-            x,
-            y,
-            width: w,
-            height: h,
+            b_box: Rect::at(x as i32, y as i32).of_size(w, h),
             confidence: max,
             class,
         });
@@ -86,18 +84,94 @@ fn transpose<T>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
         .collect()
 }
 
-pub(crate) fn apply_conf_and_nms(
-    conf_thresh: ConfThresh,
+// Non-vectorized Non Maximum supression
+pub(crate) fn non_maximum_supression(
     iou_thresh: IOUThresh,
     results: Vec<InferenceResult>,
 ) -> Vec<InferenceResult> {
-    let high_conf = results
-        .into_iter()
-        .filter(|x| x.confidence > conf_thresh.0)
-        .collect::<Vec<InferenceResult>>();
+    //  process elements into ndarray
+    let mut nd_arr: ndarray::ArrayBase<ndarray::OwnedRepr<u32>, ndarray::Dim<[usize; 2]>> =
+        Array::zeros((0, 4));
 
-    high_conf
+    // for r in results.iter() {
+    //     let bbox = &r.b_box;
+    //     nd_arr
+    //         .push_row(array![bbox.left(), bbox.top(), bbox.left() + bbox.(w), bbox.y + bbox.h].view())
+    //         .unwrap();
+    // }
+
+    // println!("{}", nd_arr);
+    // [1., 2., 3., 4.]
+    // todo!();
+    // results.iter().group_by(|x|x)
     // TODO apply NMS
+    results
+}
+
+// Calculate intersection over union for rectangle
+pub fn iou(box1: Rect, box2: Rect) -> f32 {
+    let area = |r: Rect| r.width() * r.height();
+
+    let area1 = area(box1);
+    let area2 = area(box2);
+
+    let area_boxes = area1 + area2;
+
+    match box1.intersect(box2) {
+        Some(intersection) => area(intersection) as f32 / (area_boxes - area(intersection)) as f32,
+        None => 1.,
+    }
+}
+
+// Map [x1,y1,x2,y2] -> to ArrayBase<OwnedRepr<A>, D>
+pub fn map_bounding_boxes_to_ndarray(arr_b_boxes: Vec<[f64; 4]>) -> Array<f64, Dim<[usize; 2]>> {
+    let mut data = Vec::new();
+    let ncols = arr_b_boxes.first().map_or(0, |row| row.len());
+    let mut nrows = 0;
+
+    for i in 0..arr_b_boxes.len() {
+        data.extend_from_slice(&arr_b_boxes[i]);
+        nrows += 1;
+    }
+
+    Array2::from_shape_vec((nrows, ncols), data).unwrap()
+}
+
+pub fn vectorized_iou(boxes_a: Array<f64, Dim<[usize; 2]>>, boxes_b: Array<f64, Dim<[usize; 2]>>) {
+    let box_area =
+        |bbox: ArrayView<f64, Dim<[usize; 1]>>| (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]);
+
+    let area_a = boxes_a.map_axis(Axis(1), |row| box_area(row));
+    let area_b = boxes_b.map_axis(Axis(1), |row| box_area(row));
+    // boxes_a.slice(info)
+    // TODO USE insert_axis
+    // https://github.com/rust-ndarray/ndarray/pull/354
+    // https://docs.rs/ndarray/latest/ndarray/struct.ArrayBase.html#method.insert_axis_inplace
+    
+    let a_top_left = boxes_a.slice(s![.., ..2]);
+    let b_top_left = boxes_b.slice(s![.., ..2]);
+
+    // Elementwise maximum
+    let top_left = Zip::from(a_top_left)
+        .and(&b_top_left)
+        .map_collect(|x, &y| x.max(y));
+
+    let a_bottom_right = boxes_a.slice(s![.., 2..]);
+    let b_bottom_right = boxes_b.slice(s![.., 2..]);
+    // Elementwise minumum
+
+    let bottom_right = Zip::from(a_bottom_right)
+        .and(&b_bottom_right)
+        .map_collect(|x, &y| x.min(y));
+
+    eprintln!("TL BR");
+    eprintln!("{}", top_left);
+    eprintln!("{}", bottom_right);
+    // top_left
+    // bottom_right
+    //  .for_each(|x, &y, | {
+    //     x.max(y)
+    // });
 }
 
 /// Convieience Function to draw bounding boxes to image
@@ -111,8 +185,63 @@ pub fn draw_bounding_boxes_to_image(
         let conf = result.confidence;
         let class = result.class.clone();
 
-        let rect: Rect = result.into();
+        let rect: Rect = result.b_box.into();
+        draw_hollow_rect_mut(&mut rgb_image, rect, color);
+
+        let color = Rgb([255u8, 0u8, 0u8]);
+        let rect: Rect = Rect::at(10, 10).of_size(10, 20);
         draw_hollow_rect_mut(&mut rgb_image, rect, color)
     }
     rgb_image
+}
+
+#[cfg(test)]
+mod tests {
+    use imageproc::rect::Rect;
+    use ndarray::{ArrayView, Axis, Dim};
+
+    use crate::process::{iou, map_bounding_boxes_to_ndarray, vectorized_iou};
+
+    #[test]
+    fn test_iou() {
+        // top left (1,1)  bot right (3,3)
+        let box1 = Rect::at(1, 1).of_size(2, 2);
+        // top left (2,2)  bot right (3,3)
+        let box2 = Rect::at(2, 2).of_size(1, 1);
+
+        let iou_out = iou(box1, box2);
+
+        assert_eq!(iou_out, 0.25);
+
+        // top left (1,1)  bot right (4,4)
+        let box1 = Rect::at(1, 1).of_size(3, 3);
+        // top left (2,2)  bot right (5,5)
+        let box2 = Rect::at(2, 2).of_size(3, 3);
+        let iou_out = iou(box1, box2);
+
+        assert_eq!(iou_out, 0.2857143);
+    }
+
+    #[test]
+    fn test_vectorized_iou() {
+        let box1: [f64; 4] = [1., 1., 3., 3.];
+        let box2 = [2., 2., 3., 3.];
+        // let box3 = [3., 3., 4., 4.];
+        let all_boxes = vec![box1, box2];
+
+        let all_boxes_arr = map_bounding_boxes_to_ndarray(all_boxes);
+
+        // let box_area =
+        //     |bbox: ArrayView<f64, Dim<[usize; 1]>>| (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]);
+        // let box_area = |bbox: [f64; 4]| (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]);
+
+        // let output = arr.map_axis(Axis(1), |row| box_area(row));
+        // boxes_a: Array<f64, Dim<[usize; 2]>>
+        // boxes_b: Array<f64, Dim<[usize; 2]>>
+
+        vectorized_iou(all_boxes_arr.clone(), all_boxes_arr);
+        // println!("{}", output);
+        // assert_eq!(box_area(box1), 4.0);
+        assert_eq!(1.0, 4.0);
+    }
 }

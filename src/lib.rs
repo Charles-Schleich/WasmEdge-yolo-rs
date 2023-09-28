@@ -3,7 +3,9 @@ use std::{fs, io, path::Path};
 use image::RgbImage;
 use imageproc::rect::Rect;
 use prepare::ResizeScale;
-use process::{apply_conf_and_nms, apply_confidence_and_scale, process_output_buffer_to_tensor};
+use process::{
+    apply_confidence_and_scale, non_maximum_supression, process_output_buffer_to_tensor,
+};
 use wasi_nn::{ExecutionTarget, Graph, GraphEncoding};
 mod prepare;
 pub mod process;
@@ -112,6 +114,7 @@ impl Yolo {
         let output_tensor = process_output_buffer_to_tensor(&output_buffer);
         let vec_results =
             apply_confidence_and_scale(output_tensor, conf_thresh, self.classes, resize_scale);
+        let vec_results = non_maximum_supression(iou_thresh, vec_results);
 
         Ok(vec_results)
     }
@@ -215,16 +218,7 @@ impl YoloBuilder {
 
 #[derive(Debug)]
 pub struct InferenceResult {
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
+    b_box: Rect,
     class: String,
     confidence: f32,
-}
-
-impl From<InferenceResult> for Rect {
-    fn from(value: InferenceResult) -> Self {
-        Rect::at(value.x as i32, value.y as i32).of_size(value.width, value.height)
-    }
 }
