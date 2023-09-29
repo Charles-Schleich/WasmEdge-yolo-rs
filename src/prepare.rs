@@ -15,7 +15,6 @@ pub(crate) fn pre_process_image(image: &RgbImage) -> ([Channel; 3], ResizeScale)
     let (height, width);
     let length = input_height.max(input_width) as f32;
     let resize_scale = ResizeScale(length / SIZE as f32);
-    println!("scale {:?}", resize_scale);
 
     if input_width > input_height {
         // height is the shorter length

@@ -6,12 +6,14 @@ use prepare::ResizeScale;
 use process::{
     apply_confidence_and_scale, non_maximum_supression, process_output_buffer_to_tensor,
 };
+use rusttype::Font;
 use wasi_nn::{ExecutionTarget, Graph, GraphEncoding};
 mod prepare;
 pub mod process;
 
 pub struct Yolo {
     // inference_type: YoloType
+    font: Font<'static>,
     graph: Graph,
     classes: Vec<String>,
 }
@@ -30,6 +32,15 @@ pub enum RuntimeError {
 
     #[error("graph error")]
     GraphError(#[from] wasi_nn::Error),
+
+    #[error("result processing error")]
+    PostProcessingError(#[from] PostProcessingError),
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum PostProcessingError {
+    #[error("Cannot broadcast to Array dimension")]
+    BroadcastArrayDims,
 }
 
 const INPUT_WIDTH: usize = 640;
@@ -55,8 +66,12 @@ impl IOUThresh {
 
 impl Yolo {
     /// Creates a new instance of YOLO, including graph and classes
-    pub fn new(graph: Graph, classes: Vec<String>) -> Self {
-        Yolo { graph, classes }
+    pub fn new(graph: Graph, classes: Vec<String>, font: Font<'static>) -> Self {
+        Yolo {
+            graph,
+            classes,
+            font,
+        }
     }
 
     // Convienence function to run load file and poarse as image
@@ -66,20 +81,24 @@ impl Yolo {
         Ok(image::load_from_memory(&image_bytes)?.to_rgb8())
     }
 
+    pub fn font(self) -> Font<'static> {
+        self.font
+    }
+
     pub fn infer_file<P: AsRef<Path>>(
         self,
         image_path: P,
-        conf_thresh: ConfThresh,
-        iou_thresh: IOUThresh,
+        conf_thresh: &ConfThresh,
+        iou_thresh: &IOUThresh,
     ) -> Result<Vec<InferenceResult>, RuntimeError> {
         let image_buffer = Yolo::load_image_from_file(image_path)?;
         self.infer(conf_thresh, iou_thresh, &image_buffer)
     }
 
     pub fn infer(
-        self,
-        conf_thresh: ConfThresh,
-        iou_thresh: IOUThresh,
+        &self,
+        conf_thresh: &ConfThresh,
+        iou_thresh: &IOUThresh,
         image_buffer: &RgbImage,
     ) -> Result<Vec<InferenceResult>, RuntimeError> {
         let (bytes, resize_scale): ([Vec<Vec<f32>>; 3], ResizeScale) =
@@ -113,8 +132,8 @@ impl Yolo {
         // Process inference results into Vector of Results
         let output_tensor = process_output_buffer_to_tensor(&output_buffer);
         let vec_results =
-            apply_confidence_and_scale(output_tensor, conf_thresh, self.classes, resize_scale);
-        let vec_results = non_maximum_supression(iou_thresh, vec_results);
+            apply_confidence_and_scale(output_tensor, conf_thresh, &self.classes, resize_scale);
+        let vec_results = non_maximum_supression(iou_thresh, vec_results)?;
 
         Ok(vec_results)
     }
@@ -184,6 +203,12 @@ impl YoloBuilder {
         Ok(self)
     }
 
+    // TODO remove unwrap
+    fn load_font() -> Font<'static> {
+        let font_data: &[u8] = include_bytes!("../assets/ClearSans-Medium.ttf");
+        Font::try_from_bytes(font_data).unwrap()
+    }
+
     #[inline(always)]
     pub fn build_from_bytes<B>(self, bytes_array: impl AsRef<[B]>) -> Result<Yolo, BuildError>
     where
@@ -194,7 +219,7 @@ impl YoloBuilder {
                 let graph = wasi_nn::GraphBuilder::new(self.graph_encoding, self.execution_target)
                     .build_from_bytes(bytes_array)?;
 
-                Ok(Yolo::new(graph, classes))
+                Ok(Yolo::new(graph, classes, YoloBuilder::load_font()))
             }
             None => Err(BuildError::MissingClasses),
         }
@@ -209,14 +234,14 @@ impl YoloBuilder {
             Some(classes) => {
                 let graph = wasi_nn::GraphBuilder::new(self.graph_encoding, self.execution_target)
                     .build_from_files(files)?;
-                Ok(Yolo::new(graph, classes))
+                Ok(Yolo::new(graph, classes, YoloBuilder::load_font()))
             }
             None => Err(BuildError::MissingClasses),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InferenceResult {
     b_box: Rect,
     class: String,

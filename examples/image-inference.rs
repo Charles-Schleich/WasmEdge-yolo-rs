@@ -40,10 +40,13 @@ pub fn main() {
     let rgb_image = image::load_from_memory(&image_bytes).unwrap().to_rgb8();
 
     // Run inference
-    let vec_result = yolo.infer(conf_thresh, iou_thresh, &rgb_image).unwrap();
-    println!("{:?}", vec_result);
+    // for i in 0..100 {
+    // let vec_result = yolo.infer(&conf_thresh, &iou_thresh, &rgb_image).unwrap();
+    // println!("{:?}", vec_result);
+    // }
+    let vec_result = yolo.infer(&conf_thresh, &iou_thresh, &rgb_image).unwrap();
 
-    let output_image = draw_bounding_boxes_to_image(rgb_image, vec_result);
+    let output_image = draw_bounding_boxes_to_image(rgb_image, vec_result, yolo.font());
 
     output_image
         .save_with_format("output.png", ImageFormat::Png)
