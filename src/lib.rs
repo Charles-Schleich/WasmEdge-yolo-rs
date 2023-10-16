@@ -94,6 +94,16 @@ impl Yolo {
         let image_buffer = Yolo::load_image_from_file(image_path)?;
         self.infer(conf_thresh, iou_thresh, &image_buffer)
     }
+    
+    #[cfg(not(feature = "pure-rust"))]
+    pub fn test_features(&self){
+        println!("Test Default")
+    }
+
+    #[cfg(feature = "pure-rust")]
+    pub fn test_features(&self){
+        println!("Test pure rust")
+    }
 
     pub fn infer(
         &self,

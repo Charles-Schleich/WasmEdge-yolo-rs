@@ -2,7 +2,33 @@
 # default target
 target = "wasm32-wasi"
 
+# config clang_rt.builtins-wasm32 path (default is ```/opt/wasi-sdk/lib/clang/15.0.7/lib/wasi/```)
+# config wasi-sysroot path (default is ```/opt/wasi-sdk/share/wasi-sysroot```)
+rustflags = [
+    "-L",
+    "/opt/wasi-sdk/lib/clang/16/lib/wasi/",
+    "-l",
+    "clang_rt.builtins-wasm32",
+    "-L",
+    "/opt/wasi-sdk/share/wasi-sysroot/lib/wasm32-wasi",
+    "-l",
+    "wasi-emulated-process-clocks",
+]
+
+# rustflags = [
+#     "-L", "/opt/wasi-sdk/lib/clang/15.0.7/lib/wasi/",
+#     "-l", "clang_rt.builtins-wasm32",
+#     "-L", "/opt/wasi-sdk/share/wasi-sysroot/lib/wasm32-wasi",
+#     "-l", "wasi-emulated-process-clocks",
+# ]
+
 [target.wasm32-wasi]
 runner = "./scripts/wasmedge-runner.sh"
 
 [env]
+# # ffmpeg install path (default is ```../install```)
+# FFMPEG_DIR = { value = "../FFmpeg", relative = true } 
+FFMPEG_DIR = { value = "ffmpegfolder", relative = true }
+# # FFMPEG_DIR = { value = "../install", relative = true }
+# # config wasi-sysroot path (default is ```/opt/wasi-sdk/share/wasi-sysroot```)
+BINDGEN_EXTRA_CLANG_ARGS = "--sysroot=/opt/wasi-sdk/share/wasi-sysroot --target=wasm32-wasi -fvisibility=default"

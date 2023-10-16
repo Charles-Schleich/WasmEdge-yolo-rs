@@ -9,10 +9,29 @@
 > This library is a work in progress and is likely to change
 
 
+#### FFmpeg requirements
+This library relies on ffmpeg for video processing, 
+
+```bash
+RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
+    && apt-get -y install --no-install-recommends \
+    clang \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavfilter-dev \
+    libavformat-dev \
+    libavutil-dev \
+    pkg-config
+```
+
 ### Build + Run Examples 
 
 Build examples using the script (run from project root `/`)
 `./scripts/build-and-optimize-examples.sh`
+
+Run Examples (run from project root `/`)
+`./scripts/run-example.sh`
+
 
 
 ```bash

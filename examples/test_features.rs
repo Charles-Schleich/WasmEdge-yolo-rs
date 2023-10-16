@@ -32,24 +32,6 @@ pub fn main() {
         .build_from_files([args.model_path])
         .unwrap();
 
-    let conf_thresh = ConfThresh(0.5);
-    let iou_thresh = IOUThresh(0.5);
+    yolo.test_features();
 
-    // Load in the image
-    let image_bytes = fs::read(args.image_path).unwrap();
-    let rgb_image = image::load_from_memory(&image_bytes).unwrap().to_rgb8();
-
-    // Run inference
-    // for i in 0..100 {
-    // let vec_result = yolo.infer(&conf_thresh, &iou_thresh, &rgb_image).unwrap();
-    // println!("{:?}", vec_result);
-    // }
-
-    let vec_result = yolo.infer(&conf_thresh, &iou_thresh, &rgb_image).unwrap();
-
-    let output_image = draw_bounding_boxes_to_image(rgb_image, vec_result, yolo.font());
-
-    output_image
-        .save_with_format("output.png", ImageFormat::Png)
-        .unwrap();
 }
