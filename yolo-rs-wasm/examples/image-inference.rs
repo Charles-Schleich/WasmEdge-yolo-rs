@@ -47,7 +47,7 @@ pub fn main() {
 
     let vec_result = yolo.infer(&conf_thresh, &iou_thresh, &rgb_image).unwrap();
 
-    let output_image = draw_bounding_boxes_to_image(rgb_image, vec_result, yolo.font());
+    let output_image = draw_bounding_boxes_to_image(rgb_image, vec_result, &yolo.font());
 
     output_image
         .save_with_format("output.png", ImageFormat::Png)

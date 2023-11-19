@@ -1,0 +1,56 @@
+[package]
+name = "yolo-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["schleich.cdaniel@gmail.com"]
+categories = ["Webassembly"]
+keywords = ["Webassembly", "wasm", "neural-network", "inference", "yolo"]
+readme = "README.md"
+repository = "https://github.com/WasmEdge/mediapipe-rs"
+description = "A Rust library for YOLO vision models"
+publish = true
+
+[features]
+default = []
+pure-rust = []
+
+[[example]]
+path = "./examples/video-inference.rs"
+name = "video-inference"
+target = "wasm32-wasi"
+
+[[example]]
+path = "./examples/image-inference.rs"
+name = "image-inference"
+target = "wasm32-wasi"
+
+
+[dependencies]
+thiserror = "1.0.48"
+log = "0.4.20"
+wasi-nn = "0.6.0"
+image = { version = "0.24.7", default-features = false, features = [
+    "gif",
+    "jpeg",
+    "ico",
+    "png",
+    "pnm",
+    "tga",
+    "tiff",
+    "webp",
+    "bmp",
+    "hdr",
+    "dxt",
+    "dds",
+    "farbfeld",
+] }
+imageproc = "0.23.0"
+itertools = "0.12.0"
+ndarray = "0.15.3"
+nalgebra = "0.32.2"
+rusttype = "0.9.3"
+simplelog = "0.12.1"
+prgrs = "0.6.4"
+
+[dev-dependencies]
+clap = { version = "4.4.4", features = ["derive"] }

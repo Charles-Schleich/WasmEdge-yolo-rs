@@ -1,46 +1,4 @@
-[package]
-name = "yolo-rs"
-version = "0.1.0"
-edition = "2021"
-authors = ["schleich.cdaniel@gmail.com"]
-categories = ["Webassembly"]
-keywords = ["Webassembly", "wasm", "neural-network", "inference", "yolo"]
-readme = "README.md"
-repository = "https://github.com/WasmEdge/mediapipe-rs"
-description = "A Rust library for YOLO vision models"
-publish = true
+[workspace]
+members = ["yolo-rs-video-plugin", "yolo-rs-wasm"]
 
-[features]
-default = []
-pure-rust = [] 
-
-
-[dependencies]
-thiserror = "1.0.48"
-ffmpeg-next = "6.0.0"
-# 
-wasi-nn = "0.6.0"
-image = { version = "0.24.7", default-features = false, features = [
-    "gif",
-    "jpeg",
-    "ico",
-    "png",
-    "pnm",
-    "tga",
-    "tiff",
-    "webp",
-    "bmp",
-    "hdr",
-    "dxt",
-    "dds",
-    "farbfeld",
-] }
-imageproc = "0.23.0"
-itertools = "0.11.0"
-ndarray = "0.15.3"
-nalgebra = "0.32.2"
-rusttype = "0.9.3"
-
-
-[dev-dependencies]
-clap = { version = "4.4.4", features = ["derive"] }
+workspace.resolver = 2

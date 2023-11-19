@@ -94,12 +94,16 @@ pub(crate) fn non_maximum_supression(
     iou_thresh: &IOUThresh,
     mut results: Vec<InferenceResult>,
 ) -> Result<Vec<InferenceResult>, RuntimeError> {
+
+
     results.sort_by(|x, y| y.confidence.total_cmp(&x.confidence));
 
     // TODO make computation more efficient
     //  Potentially grouping by class type reduces the set of bounding boxes that need to be calucated over
     //  i.e group all class1, all class2 ...
     //
+
+    println!("Before Iter into BBOX");
     // TODO integration creation of ND array into iterator
     let b_boxes: Vec<[f64; 4]> = results
         .iter()
@@ -110,14 +114,22 @@ pub(crate) fn non_maximum_supression(
         })
         .collect();
 
+    println!("Before BBOX to NDArray");
     let nd_bboxes = bboxes_to_ndarray(b_boxes);
-
+    if nd_bboxes.is_empty(){
+        return Ok(Vec::new())
+    }
+    println!("Before IOU MATRIX");
+    println!("{}",nd_bboxes.len());
+    println!("{nd_bboxes}");
     let iou_matrix = vectorized_iou(nd_bboxes.clone(), nd_bboxes)?;
+
 
     // TODO look at using Two Array pointers to walk list of values
     // discarding values that we do not need
     // let results_combinations = results.iter().enumerate().zip(results.iter().enumerate());
     // TODO REMOVE CLONE and re-write comparison function
+    println!("Results Combination ");
     let results_combinations = results
         .clone()
         .into_iter()
@@ -239,7 +251,7 @@ pub fn vectorized_iou(
 pub fn draw_bounding_boxes_to_image(
     mut rgb_image: RgbImage,
     vec_results: Vec<InferenceResult>,
-    font: Font<'static>,
+    font: &Font<'static>,
 ) -> RgbImage {
     let color = Rgb([0u8, 0u8, 255u8]);
 

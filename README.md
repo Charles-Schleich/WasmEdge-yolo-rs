@@ -1,42 +1,29 @@
-<div align="center">
-  <h1><code>YOLO-rs</code></h1>
-  </p>
-</div>
-
-# A Rust library for YOLO tasks for WasmEdge WASI-NN
+## WasmEdge Yolo-rs Image + Video Processing 
 
 > [!NOTE]  
 > This library is a work in progress and is likely to change
 
+This is a small plugin developed for the WasmEdge Runtime to support video processing of [yolo-rs](https://github.com/Charles-Schleich/yolo-rs)
+Using FFMPEG for native video processing. 
 
-#### FFmpeg requirements
-This library relies on ffmpeg for video processing, 
+Build `host_library` and `wasm_app` in separate terminals
 
-```bash
-RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
-    && apt-get -y install --no-install-recommends \
-    clang \
-    libavcodec-dev \
-    libavdevice-dev \
-    libavfilter-dev \
-    libavformat-dev \
-    libavutil-dev \
-    pkg-config
-```
+#### To build:
+Terminal 1:  
+`cd yolo-rs-video-plugin && cargo build --release`
+Terminal 2:  
+`cd yolo-rs-wasm && cargo build --release`  
 
-### Build + Run Examples 
+<!-- 
+Quick build
+cd wasm_app/ && cargo build --release && cd ../ && cd host_library/ && cargo build --release && cd .. 
+-->
 
-Build examples using the script (run from project root `/`)
-`./scripts/build-and-optimize-examples.sh`
-
-Run Examples (run from project root `/`)
-`./scripts/run-example.sh`
+#### To run:
+From project root  
+`WASMEDGE_PLUGIN_PATH=/home/charles/we/yolo_ffmpeg_plugin/target   wasmedge  ./target/wasm32-wasi/release/wasm_app.wasm` 
 
 
+TODO:
+Mention that wasmedge is required.
 
-```bash
-wasmedge --dir .:. ./target/wasm32-wasi/release/examples/image-inference.wasm \
-    --model-path ./yolov8n.torchscript \
-    --image-path examples/dog.png \
-    --class-names-path examples/class_names
-```
