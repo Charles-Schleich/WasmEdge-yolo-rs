@@ -1,5 +1,3 @@
-extern crate simplelog;
-
 pub mod yolo_rs_video_plugin {
     use log::LevelFilter;
 

@@ -1,4 +1,4 @@
 [workspace]
 members = ["yolo-rs-video-plugin", "yolo-rs-wasm"]
 
-workspace.resolver = 2
+workspace.resolver = "2"

@@ -1,13 +1,16 @@
-use image::{GenericImage, ImageBuffer, Rgb, RgbImage};
+use image::{ImageBuffer, RgbImage};
 use imageproc::rect::Rect;
-use log::{debug, info, LevelFilter};
+use log::{debug, error, info, LevelFilter};
 use prepare::ResizeScale;
-use prgrs::Prgrs;
 use process::{
     apply_confidence_and_scale, non_maximum_supression, process_output_buffer_to_tensor,
 };
 use rusttype::Font;
-use std::{fs, io, path::Path};
+use std::{
+    fs::{self},
+    io::{self, ErrorKind},
+    path::Path,
+};
 use wasi_nn::{ExecutionTarget, Graph, GraphEncoding};
 
 use crate::video_proc::yolo_rs_video_plugin;
@@ -26,6 +29,7 @@ pub enum YoloType {
     Segment,
     Detection,
 }
+
 #[derive(thiserror::Error, Debug)]
 pub enum RuntimeError {
     #[error("image error")]
@@ -39,6 +43,12 @@ pub enum RuntimeError {
 
     #[error("result processing error")]
     PostProcessingError(#[from] PostProcessingError),
+
+    #[error("video plugin: load video")]
+    VideoLoad,
+
+    #[error("video plugin: assemble frames")]
+    VideoAssemble,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -81,7 +91,7 @@ impl Yolo {
     // Convienence function to run load file and poarse as image
     fn load_image_from_file<P: AsRef<Path>>(image_path: P) -> Result<RgbImage, RuntimeError> {
         let path = image_path.as_ref();
-        let image_bytes = fs::read(path)?;
+        let image_bytes: Vec<u8> = fs::read(path)?;
         Ok(image::load_from_memory(&image_bytes)?.to_rgb8())
     }
 
@@ -112,23 +122,65 @@ impl Yolo {
     pub fn infer_video<P: AsRef<Path>>(
         self,
         video_path: P,
+        output_path: P,
         conf_thresh: &ConfThresh,
         iou_thresh: &IOUThresh,
-    ) -> Result<Vec<InferenceResult>, RuntimeError> {
-        self.process_video(video_path, conf_thresh, iou_thresh);
-        Ok(Vec::new())
+        draw_bounding_boxes: bool,
+    ) -> Result<Vec<Vec<InferenceResult>>, RuntimeError> {
+        self.process_video(
+            video_path,
+            output_path,
+            conf_thresh,
+            iou_thresh,
+            draw_bounding_boxes,
+        )
     }
 
+    /*
+    Process Video Returns a Results
+     */
     fn process_video<P: AsRef<Path>>(
         self,
         video_path: P,
+        output_path: P,
         conf_thresh: &ConfThresh,
         iou_thresh: &IOUThresh,
-    ) -> Result<(), ()> {
+        draw_bounding_boxes: bool,
+    ) -> Result<Vec<Vec<InferenceResult>>, RuntimeError> {
         debug!("Start Proc Video");
 
-        // TODO: Remove Unwrap
-        let mut filename = video_path.as_ref().to_str().unwrap().to_string();
+        let mut vec_results_by_frame = Vec::new();
+
+        // Checks if input path exists
+        if !video_path.as_ref().exists() {
+            let error = std::io::Error::from(ErrorKind::NotFound);
+            return Err(RuntimeError::from(error))?;
+        }
+
+        let (mut filename, mut output_filename) =
+            match (video_path.as_ref().to_str(), output_path.as_ref().to_str()) {
+                (None, None) => {
+                    error!("Input and output Video file paths are not valid");
+                    return Err(RuntimeError::from(std::io::Error::from(
+                        ErrorKind::NotFound,
+                    )))?;
+                }
+                (None, Some(_)) => {
+                    error!("Output Video File Path Is not a valid String");
+                    return Err(RuntimeError::from(std::io::Error::from(
+                        ErrorKind::NotFound,
+                    )))?;
+                }
+                (Some(_), None) => {
+                    error!("Input Video File Path Is not a valid String");
+                    return Err(RuntimeError::from(std::io::Error::from(
+                        ErrorKind::NotFound,
+                    )))?;
+                }
+                (Some(input_filename), Some(output_filename)) => {
+                    (input_filename.to_string(), output_filename.to_string())
+                }
+            };
 
         yolo_rs_video_plugin::init_plugin_logging_with_log_level(LevelFilter::Info);
 
@@ -138,7 +190,7 @@ impl Yolo {
         let frame_count_ptr = std::ptr::addr_of_mut!(frame_count);
 
         debug!("Call load_video_to_host_memory() ");
-        let result = unsafe {
+        let load_video_result = unsafe {
             yolo_rs_video_plugin::load_video_to_host_memory(
                 filename.as_mut_ptr() as usize as i32,
                 filename.len() as i32,
@@ -149,17 +201,19 @@ impl Yolo {
             )
         };
 
+        if load_video_result != 0 {
+            error!("Failure Loading Video {load_video_result}");
+            return Err(RuntimeError::VideoLoad);
+        }
+
         let image_buf_size: usize = (width * height * 3) as usize;
-        debug!("WIDTH {}", width);
-        debug!("HEIGHT {}", height);
-        debug!("Number of Frames {}", frame_count);
+        debug!("Video (W,H,#Frames):({},{},{})", width, height,frame_count);
 
         info!("Begin Processing {} frames ", frame_count);
-        
         for idx in 0..frame_count {
             // for idx in Prgrs::new(0..frame_count, frame_count as usize) {
 
-            println!("Process Frame {idx}");
+            // println!("Process Frame {idx}");
             debug!("------ Run for frame {}", idx);
             let mut image_buf: Vec<u8> = vec![0; image_buf_size];
 
@@ -171,42 +225,36 @@ impl Yolo {
             debug!("WASM image_buf_capacity {:?}", buf_capacity);
 
             {
-                unsafe {
-                    yolo_rs_video_plugin::get_frame(idx, buf_ptr_raw, buf_len, buf_capacity)
-                };
-
-                let mut image_buf: ImageBuffer<image::Rgb<u8>, Vec<u8>> =
-                    ImageBuffer::from_vec(width as u32, height as u32, image_buf).unwrap();
-               println!("Before inference {idx}");
-               println!("{} {}", image_buf.width(), image_buf.height());
+                unsafe { yolo_rs_video_plugin::get_frame(idx, buf_ptr_raw, buf_len, buf_capacity) };
 
                 // TODO: Remove Unwrap
-                let vec_results: Vec<InferenceResult> = self.infer(
-                    conf_thresh,
-                    iou_thresh,
-                    &image_buf
-                ).unwrap();
+                let image_buf: ImageBuffer<image::Rgb<u8>, Vec<u8>> =
+                    ImageBuffer::from_vec(width as u32, height as u32, image_buf).unwrap();
 
-               println!("After Inference {idx}");
-               let image_after_drawing = process::draw_bounding_boxes_to_image(
-                    image_buf,
-                    vec_results,
-                    &self.font
-                );
+                let vec_results: Vec<InferenceResult> =
+                    self.infer(conf_thresh, iou_thresh, &image_buf)?;
+
+                info!("Processing Frame {idx}, #Detections {}",vec_results.len());
+
+                if draw_bounding_boxes {
+                    // I am discarding the result as this is a Convienence post processing function
+                    // Also available for the user if they wish to use it
+                    let _ = process::draw_bounding_boxes_on_mut_image(
+                        image_buf,
+                        &vec_results,
+                        &self.font,
+                    );
+                }
+
+                vec_results_by_frame.push(vec_results);
 
                 unsafe { yolo_rs_video_plugin::write_frame(idx, buf_ptr_raw, buf_len) };
             }
         }
 
         info!("Finished Writing {:?} Frames To Plugin", frame_count);
-
-        let mut out: Vec<&str> = filename.split(".").collect::<Vec<&str>>();
-        out.insert(0, "./");
-        out.insert(out.len() - 1, "_out.");
-        let mut output_filename = out.join("");
-
         info!("Begin Encode Video {:?}", output_filename);
-        let output_code = unsafe {
+        let output_video_assemble_code = unsafe {
             yolo_rs_video_plugin::assemble_output_frames_to_video(
                 output_filename.as_mut_ptr() as usize as i32,
                 output_filename.len() as i32,
@@ -214,9 +262,14 @@ impl Yolo {
             )
         };
 
+        if output_video_assemble_code != 0 {
+            error!("Failure Assembling Video {output_video_assemble_code}");
+            return Err(RuntimeError::VideoAssemble);
+        }
+
         info!("Finished Encoding Video : {}", output_filename);
 
-        Ok(())
+        Ok(vec_results_by_frame)
     }
 
     pub fn infer(
@@ -237,6 +290,7 @@ impl Yolo {
             .collect::<Vec<f32>>();
 
         let mut context = self.graph.init_execution_context().unwrap();
+
         context
             .set_input(
                 0,
@@ -258,9 +312,10 @@ impl Yolo {
 
         let vec_results =
             apply_confidence_and_scale(output_tensor, conf_thresh, &self.classes, resize_scale);
-        if vec_results.len()==0{
-            return OK(vec_results);
-         }
+
+        if vec_results.len() == 0 {
+            return Ok(vec_results);
+        }
         let vec_results = non_maximum_supression(iou_thresh, vec_results)?;
 
         Ok(vec_results)

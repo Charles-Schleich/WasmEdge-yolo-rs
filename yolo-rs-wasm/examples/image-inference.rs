@@ -2,7 +2,7 @@ use std::fs;
 
 use clap::Parser;
 use image::ImageFormat;
-use yolo_rs::{process::draw_bounding_boxes_to_image, ConfThresh, IOUThresh, Yolo, YoloBuilder};
+use yolo_rs::{process::draw_bounding_boxes_on_mut_image, ConfThresh, IOUThresh, Yolo, YoloBuilder};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -29,6 +29,7 @@ pub fn main() {
     let yolo: Yolo = YoloBuilder::new()
         .classes_file(args.class_names_path)
         .unwrap()
+        // .execution_target(wasi_nn::ExecutionTarget::GPU)
         .build_from_files([args.model_path])
         .unwrap();
 
@@ -46,8 +47,8 @@ pub fn main() {
     // }
 
     let vec_result = yolo.infer(&conf_thresh, &iou_thresh, &rgb_image).unwrap();
-
-    let output_image = draw_bounding_boxes_to_image(rgb_image, vec_result, &yolo.font());
+    println!("Detection Results {:?}",vec_result); 
+    let output_image = draw_bounding_boxes_on_mut_image(rgb_image, &vec_result, &yolo.font());
 
     output_image
         .save_with_format("output.png", ImageFormat::Png)

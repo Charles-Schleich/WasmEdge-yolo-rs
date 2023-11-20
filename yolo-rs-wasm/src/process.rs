@@ -103,7 +103,6 @@ pub(crate) fn non_maximum_supression(
     //  i.e group all class1, all class2 ...
     //
 
-    println!("Before Iter into BBOX");
     // TODO integration creation of ND array into iterator
     let b_boxes: Vec<[f64; 4]> = results
         .iter()
@@ -114,22 +113,17 @@ pub(crate) fn non_maximum_supression(
         })
         .collect();
 
-    println!("Before BBOX to NDArray");
     let nd_bboxes = bboxes_to_ndarray(b_boxes);
     if nd_bboxes.is_empty(){
         return Ok(Vec::new())
     }
-    println!("Before IOU MATRIX");
-    println!("{}",nd_bboxes.len());
-    println!("{nd_bboxes}");
-    let iou_matrix = vectorized_iou(nd_bboxes.clone(), nd_bboxes)?;
 
+    let iou_matrix = vectorized_iou(nd_bboxes.clone(), nd_bboxes)?;
 
     // TODO look at using Two Array pointers to walk list of values
     // discarding values that we do not need
     // let results_combinations = results.iter().enumerate().zip(results.iter().enumerate());
     // TODO REMOVE CLONE and re-write comparison function
-    println!("Results Combination ");
     let results_combinations = results
         .clone()
         .into_iter()
@@ -154,11 +148,8 @@ pub(crate) fn non_maximum_supression(
             continue;
         }
 
-        // potentially unsafe indexing
+        // TODO: potentially unsafe indexing
         let iou = iou_matrix[[idx_1, idx_2]];
-        // println!("Result 1 {:?} {:?}", r_1.class, r_1.confidence);
-        // println!("Result 1 {:?} {:?}", r_2.class, r_2.confidence);
-        // println!("{} {}", iou, iou_thresh.0);
         if iou > iou_thresh.0 as f64 {
             keep.remove(&(idx_2 as i32));
         }
@@ -166,7 +157,6 @@ pub(crate) fn non_maximum_supression(
 
     let mut keepers = Vec::new();
     for elem in keep {
-        // println!("{:?}", results[elem as usize]);
         keepers.push(results[elem as usize].clone());
     }
 
@@ -248,9 +238,9 @@ pub fn vectorized_iou(
 }
 
 /// Convieience Function to draw bounding boxes to image
-pub fn draw_bounding_boxes_to_image(
+pub fn draw_bounding_boxes_on_mut_image(
     mut rgb_image: RgbImage,
-    vec_results: Vec<InferenceResult>,
+    vec_results: &Vec<InferenceResult>,
     font: &Font<'static>,
 ) -> RgbImage {
     let color = Rgb([0u8, 0u8, 255u8]);
