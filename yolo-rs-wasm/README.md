@@ -15,11 +15,12 @@ https://wasmedge.org/docs/start/install
 
 ## Examples 
 
-#### Image Inference  
-###### Build  
+### Image Inference  
+##### Build  
 From directory `./yolo-rs-wasm`  
 `cargo build --release`  
-  
+
+##### Run  
 From project root `./`  
 ```bash
 wasmedge --dir .:. ./target/wasm32-wasi/release/examples/image-inference.wasm \

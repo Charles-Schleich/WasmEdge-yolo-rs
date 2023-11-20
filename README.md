@@ -3,7 +3,7 @@
   </p>
 </div>
 
-# A Rust library for Yolo tasks for WasmEdge WASI-NN
+# A Rust library for Yolo tasks using WasmEdge + WASI-NN + FFMPEG 
 
 > [!NOTE]  
 > This library is a work in progress and is likely to change
@@ -14,7 +14,7 @@
 `wasmedge` built with the WASI-NN Plugin  
 https://wasmedge.org/docs/start/install  
 
-##### FFmpeg requirements
+##### FFmpeg libraries
 This library relies on ffmpeg for video processing, 
 
 ```bash
@@ -31,11 +31,12 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 
 
 ## Run Examples 
-#### Image Inference  
-###### Build  
+### Image Inference  
+#### Build  
 From directory `./yolo-rs-wasm`  
 `cargo build --release`  
   
+#### Run  
 From project root `./`  
 ```bash
 wasmedge --dir .:. ./target/wasm32-wasi/release/examples/image-inference.wasm \
@@ -43,22 +44,17 @@ wasmedge --dir .:. ./target/wasm32-wasi/release/examples/image-inference.wasm \
     --image-path ./yolo-rs-wasm/example_inputs/busy_street.png \
     --class-names-path ./yolo-rs-wasm/example_inputs/class_names
 ```
-```bash
-wasmedge --dir .:. ./target/wasm32-wasi/release/examples/image-inference.wasm \
-    --model-path ./yolov8n.torchscript \
-    --image-path examples/dog.png \
-    --class-names-path examples/class_names
-```
 
-#### Video-inference example
-
+### Video-inference example
+#### Build  
 From directory `./yolo-rs-wasm`  
 `cargo build --release`  
 
 From directory `./yolo-rs-video-plugin`  
 `cargo build --release`  
 
-
+#### Run  
+From project root `./`
 ```bash
 WASMEDGE_PLUGIN_PATH=./target/x86_64-unknown-linux-gnu/release/libyolo_rs_video_plugin.so   \
 wasmedge --dir .:. \
