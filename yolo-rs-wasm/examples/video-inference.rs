@@ -1,6 +1,6 @@
 use clap::Parser;
 use log::LevelFilter;
-use simplelog::{CombinedLogger, Config, TerminalMode, ColorChoice, TermLogger};
+use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
 use yolo_rs::{ConfThresh, IOUThresh, Yolo, YoloBuilder};
 
 #[derive(Parser, Debug)]
@@ -21,7 +21,6 @@ struct Args {
     /// video_path
     #[arg(short, long)]
     output_video_path: String,
-
 }
 
 pub fn main() {

@@ -94,8 +94,6 @@ pub(crate) fn non_maximum_supression(
     iou_thresh: &IOUThresh,
     mut results: Vec<InferenceResult>,
 ) -> Result<Vec<InferenceResult>, RuntimeError> {
-
-
     results.sort_by(|x, y| y.confidence.total_cmp(&x.confidence));
 
     // TODO make computation more efficient
@@ -114,8 +112,8 @@ pub(crate) fn non_maximum_supression(
         .collect();
 
     let nd_bboxes = bboxes_to_ndarray(b_boxes);
-    if nd_bboxes.is_empty(){
-        return Ok(Vec::new())
+    if nd_bboxes.is_empty() {
+        return Ok(Vec::new());
     }
 
     let iou_matrix = vectorized_iou(nd_bboxes.clone(), nd_bboxes)?;

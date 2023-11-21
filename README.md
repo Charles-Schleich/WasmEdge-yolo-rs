@@ -34,7 +34,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 ### Image Inference  
 #### Build  
 From directory `./yolo-rs-wasm`  
-`cargo build --release`  
+`cargo build --release --example image-inference`  
   
 #### Run  
 From project root `./`  
@@ -48,7 +48,7 @@ wasmedge --dir .:. ./target/wasm32-wasi/release/examples/image-inference.wasm \
 ### Video-inference example
 #### Build  
 From directory `./yolo-rs-wasm`  
-`cargo build --release`  
+`cargo build --release --example video-inference`  
 
 From directory `./yolo-rs-video-plugin`  
 `cargo build --release`  

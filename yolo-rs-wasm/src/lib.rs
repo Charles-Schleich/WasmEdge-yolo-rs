@@ -207,7 +207,7 @@ impl Yolo {
         }
 
         let image_buf_size: usize = (width * height * 3) as usize;
-        debug!("Video (W,H,#Frames):({},{},{})", width, height,frame_count);
+        debug!("Video (W,H,#Frames):({},{},{})", width, height, frame_count);
 
         info!("Begin Processing {} frames ", frame_count);
         for idx in 0..frame_count {
@@ -234,7 +234,7 @@ impl Yolo {
                 let vec_results: Vec<InferenceResult> =
                     self.infer(conf_thresh, iou_thresh, &image_buf)?;
 
-                info!("Processing Frame {idx}, #Detections {}",vec_results.len());
+                info!("Processing Frame {idx}, #Detections {}", vec_results.len());
 
                 if draw_bounding_boxes {
                     // I am discarding the result as this is a Convienence post processing function

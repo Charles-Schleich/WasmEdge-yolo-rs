@@ -18,7 +18,8 @@ https://wasmedge.org/docs/start/install
 ### Image Inference  
 ##### Build  
 From directory `./yolo-rs-wasm`  
-`cargo build --release`  
+`cargo build --release --example image-inference`  
+
 
 ##### Run  
 From project root `./`  
