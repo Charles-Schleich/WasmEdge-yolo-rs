@@ -2,9 +2,7 @@ use std::fs;
 
 use clap::Parser;
 use image::ImageFormat;
-use yolo_rs::{
-    process::draw_bounding_boxes_on_mut_image, ConfThresh, IOUThresh, Yolo, YoloBuilder,
-};
+use yolo_rs::{utils::draw_bounding_boxes_on_mut_image, ConfThresh, IOUThresh, Yolo, YoloBuilder};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -48,7 +46,9 @@ pub fn main() {
     //     println!("{:?}", vec_result);
     // }
 
-    let vec_result = yolo.infer(&conf_thresh, &iou_thresh, &rgb_image).unwrap();
+    let vec_result = yolo
+        .infer_image(&conf_thresh, &iou_thresh, &rgb_image)
+        .unwrap();
     println!("Detection Results {:?}", vec_result);
     let output_image = draw_bounding_boxes_on_mut_image(rgb_image, &vec_result, &yolo.font());
 

@@ -8,6 +8,7 @@ type Channel = Vec<Vec<f32>>;
 #[derive(Debug)]
 pub struct ResizeScale(pub f32);
 
+/// This Function maps an RGB image into a single Vector of Floating point numbers
 pub(crate) fn pre_process_image(
     image: &RgbImage,
 ) -> Result<([Channel; 3], ResizeScale), ImageError> {

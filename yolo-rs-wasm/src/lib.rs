@@ -1,3 +1,19 @@
+//! # `WasmEdge Yolo-rs`
+//!
+//! ### Introduction
+//!
+//! This project provides a high-level Interface to the YOLO family of Computer Vision Models
+//! It supports both Image and Video inference.
+//!
+//! ### Usage
+//! TODO EXAMPLE
+//! ```
+//!
+//! ### Note
+//!
+//! This crate is in active development
+//!
+
 use image::{ImageBuffer, RgbImage};
 use imageproc::rect::Rect;
 use log::{debug, error, info, LevelFilter};
@@ -5,6 +21,7 @@ use prepare::ResizeScale;
 use process::{
     apply_confidence_and_scale, non_maximum_supression, process_output_buffer_to_tensor,
 };
+
 use rusttype::Font;
 use std::{
     fs::{self},
@@ -14,10 +31,16 @@ use std::{
 use wasi_nn::{ExecutionTarget, Graph, GraphEncoding};
 
 use crate::video_proc::yolo_rs_video_plugin;
+
 mod prepare;
-pub mod process;
+mod process;
+pub mod utils;
 mod video_proc;
 
+/// Testcomment
+
+/// Yolo Struct containing Graph, font for drawing and class names
+/// Can be reused after an inference has taken place.
 pub struct Yolo {
     // inference_type: YoloType
     font: Font<'static>,
@@ -25,13 +48,15 @@ pub struct Yolo {
     classes: Vec<String>,
 }
 
-// TODO  implement Processing for Pose And Segment models
+// TODO: implement Processing for Pose And Segment models
+/// Enum to distinguish which Type of post proccessing to be applied to nerual net output- Unused Currently
 pub enum YoloType {
     Pose,
     Segment,
     Detection,
 }
 
+/// An Error to represent possible Runtime Errors after a Yolo Runtime has been created
 #[derive(thiserror::Error, Debug)]
 pub enum YoloRuntimeError {
     #[error("image error")]
@@ -56,6 +81,7 @@ pub enum YoloRuntimeError {
     VideoPluginImageWriteError,
 }
 
+/// Error emitted during post processing of Tensor Data
 #[derive(thiserror::Error, Debug)]
 pub enum PostProcessingError {
     #[error("Cannot broadcast to Array dimension")]
@@ -67,6 +93,7 @@ const INPUT_HEIGHT: usize = 640;
 const OUTPUT_CLASSES: usize = 80;
 const OUTPUT_OBJECTS: usize = 8400;
 
+/// Struct to hold Confidence Threshold f32
 pub struct ConfThresh(pub f32);
 
 impl ConfThresh {
@@ -75,6 +102,7 @@ impl ConfThresh {
     }
 }
 
+/// struct to hold floating point value for Intersection over Union
 pub struct IOUThresh(pub f32);
 
 impl IOUThresh {
@@ -111,19 +139,18 @@ impl Yolo {
         iou_thresh: &IOUThresh,
     ) -> Result<Vec<InferenceResult>, YoloRuntimeError> {
         let image_buffer = Yolo::load_image_from_file(image_path)?;
-        self.infer(conf_thresh, iou_thresh, &image_buffer)
+        self.infer_image(conf_thresh, iou_thresh, &image_buffer)
     }
 
-    #[cfg(not(feature = "pure-rust"))]
-    pub fn test_features(&self) {
-        println!("Test Default")
-    }
-
-    #[cfg(feature = "pure-rust")]
-    pub fn test_features(&self) {
-        println!("Test pure rust")
-    }
-
+    /// High Level Function to Infer video using WasmEdge plugin
+    /// Internally this function:
+    /// - Loads video file at supplied path into plugin Memory
+    /// - Splits video into individual frames
+    /// - Retrieves Frames one by one from Video Plugin
+    /// - Runs Image inference on frame, using infer_image method
+    /// - Writes post-inference frame back to Plugin Memory frame buffer
+    /// - Reassmbles Frames into video, and outputs video
+    // #[cfg(feature = "video-plugin")]
     pub fn infer_video<P: AsRef<Path>>(
         self,
         video_path: P,
@@ -132,26 +159,7 @@ impl Yolo {
         iou_thresh: &IOUThresh,
         draw_bounding_boxes: bool,
     ) -> Result<Vec<Vec<InferenceResult>>, YoloRuntimeError> {
-        self.process_video(
-            video_path,
-            output_path,
-            conf_thresh,
-            iou_thresh,
-            draw_bounding_boxes,
-        )
-    }
-
-    /*
-    Process Video Returns a Results
-     */
-    fn process_video<P: AsRef<Path>>(
-        self,
-        video_path: P,
-        output_path: P,
-        conf_thresh: &ConfThresh,
-        iou_thresh: &IOUThresh,
-        draw_bounding_boxes: bool,
-    ) -> Result<Vec<Vec<InferenceResult>>, YoloRuntimeError> {
+        // TODO Maybe check for existence of plugin before attempting to call functions
         debug!("Start Proc Video");
 
         let mut vec_results_by_frame = Vec::new();
@@ -162,25 +170,23 @@ impl Yolo {
             return Err(YoloRuntimeError::from(error))?;
         }
 
+        let file_not_found: Result<Vec<Vec<InferenceResult>>, YoloRuntimeError> = Err(
+            YoloRuntimeError::from(std::io::Error::from(ErrorKind::NotFound)),
+        );
+
         let (mut filename, mut output_filename) =
             match (video_path.as_ref().to_str(), output_path.as_ref().to_str()) {
                 (None, None) => {
                     error!("Input and output Video file paths are not valid");
-                    return Err(YoloRuntimeError::from(std::io::Error::from(
-                        ErrorKind::NotFound,
-                    )))?;
+                    return file_not_found;
                 }
                 (None, Some(_)) => {
                     error!("Output Video File Path Is not a valid String");
-                    return Err(YoloRuntimeError::from(std::io::Error::from(
-                        ErrorKind::NotFound,
-                    )))?;
+                    return file_not_found;
                 }
                 (Some(_), None) => {
                     error!("Input Video File Path Is not a valid String");
-                    return Err(YoloRuntimeError::from(std::io::Error::from(
-                        ErrorKind::NotFound,
-                    )))?;
+                    return file_not_found;
                 }
                 (Some(input_filename), Some(output_filename)) => {
                     (input_filename.to_string(), output_filename.to_string())
@@ -216,9 +222,6 @@ impl Yolo {
 
         info!("Begin Processing {} frames ", frame_count);
         for idx in 0..frame_count {
-            // for idx in Prgrs::new(0..frame_count, frame_count as usize) {
-
-            // println!("Process Frame {idx}");
             debug!("------ Run for frame {}", idx);
             let mut image_buf: Vec<u8> = vec![0; image_buf_size];
 
@@ -239,14 +242,14 @@ impl Yolo {
                     };
 
                 let vec_results: Vec<InferenceResult> =
-                    self.infer(conf_thresh, iou_thresh, &image_buf)?;
+                    self.infer_image(conf_thresh, iou_thresh, &image_buf)?;
 
                 info!("Processing Frame {idx}, #Detections {}", vec_results.len());
 
                 if draw_bounding_boxes {
-                    // I am discarding the result as this is a Convienence post processing function
+                    // I am discarding the result as this is a convienence post processing function
                     // Also available for the user if they wish to use it
-                    let _ = process::draw_bounding_boxes_on_mut_image(
+                    let _ = utils::draw_bounding_boxes_on_mut_image(
                         image_buf,
                         &vec_results,
                         &self.font,
@@ -279,7 +282,19 @@ impl Yolo {
         Ok(vec_results_by_frame)
     }
 
-    pub fn infer(
+    /// Function to Infer image buffer
+    /// Internally this function:
+    /// - Preprocesses the image into a 3 Channel Vec of Vec, one top level vector per channel [R, G , B]
+    /// - Flattens the 2D Vec of Vecs into a single vector of floating point numbers
+    /// - Initializes the execution Graph - TODO: Can be done in The builder
+    /// - Sets the input and computes the result from the image
+    /// - Processes the output buffer Vec<32> into the required tensor shape of (8400 x 84)
+    /// - 8400 detections , 80 possible classes , 4 values for x,y,w,h for the bounding box location
+    /// - Apply confidence threshold and scaling to results
+    /// - Apply Intersection over union and non-maximual supression to results
+    /// - Returns Vec of InferenceResult    
+    // CONTINE FROM HERE
+    pub fn infer_image(
         &self,
         conf_thresh: &ConfThresh,
         iou_thresh: &IOUThresh,
@@ -328,6 +343,7 @@ impl Yolo {
     }
 }
 
+/// Error emitted during Building of Yolo Context
 #[derive(thiserror::Error, Debug)]
 pub enum BuildError {
     #[error("Classes must be added to the YoloBuilder before building")]
@@ -340,6 +356,7 @@ pub enum BuildError {
     FileError(#[from] std::io::Error),
 }
 
+/// Builder Pattern for Yolo Execution Context
 pub struct YoloBuilder {
     // inference_type: YoloType
     graph_encoding: GraphEncoding,
@@ -430,6 +447,7 @@ impl YoloBuilder {
     }
 }
 
+/// Struct to hold Bounding box, Class and Confidence result from inference
 #[derive(Debug, Clone)]
 pub struct InferenceResult {
     b_box: Rect,

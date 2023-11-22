@@ -10,7 +10,8 @@ use ndarray::{s, Array2, ArrayView, Axis, Dim, Zip};
 use rusttype::{Font, Scale};
 
 /// Function to process output tensor from YOLOv8 Detection Model
-/// TODO: more efficient parsing: remove transpose convert from buffer directly to
+// TODO: more efficient parsing: remove transpose convert from buffer directly to
+// 2D vector
 pub fn process_output_buffer_to_tensor(buffer: &[f32]) -> Vec<Vec<f32>> {
     // Output buffer is in format
     // 8400 x 84 as a single Vec of f32
@@ -26,12 +27,12 @@ pub fn process_output_buffer_to_tensor(buffer: &[f32]) -> Vec<Vec<f32>> {
     rows
 }
 
-// Row Format is
-// [x,y,w,h,p1,p2,p3...p80]
-// where:
-// x,y are the pixel locations of the top left corner of the bounding box,
-// w,h are the width and height of bounding box,
-// p1,p2..p80, are the class probabilities.
+/// Row Format is
+/// [x,y,w,h,p1,p2,p3...p80]
+/// where:
+/// x,y are the pixel locations of the top left corner of the bounding box,
+/// w,h are the width and height of bounding box,
+/// p1,p2..p80, are the class probabilities.
 pub(crate) fn apply_confidence_and_scale(
     rows: Vec<Vec<f32>>,
     conf_thresh: &ConfThresh,
@@ -108,7 +109,8 @@ fn transpose<T>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
         .collect()
 }
 
-// Non-vectorized Non Maximum supression
+/// Non-vectorized Non Maximum supression implementation
+// TODO: Review this to make it a simpler
 pub(crate) fn non_maximum_supression(
     iou_thresh: &IOUThresh,
     mut results: Vec<InferenceResult>,
@@ -155,8 +157,7 @@ pub(crate) fn non_maximum_supression(
 
     // We are checking to see if we want to keep inference result - 1
     for ((idx_1, r_1), (idx_2, r_2)) in results_combinations {
-        // When to skip comparison
-
+        // When to skip comparison\
         if idx_1 == idx_2 {
             continue;
         }
@@ -211,6 +212,8 @@ pub fn bboxes_to_ndarray(arr_b_boxes: Vec<[f64; 4]>) -> Array2<f64> {
     Array2::from_shape_vec((nrows, ncols), data).unwrap()
 }
 
+/// Vectorized version of the Intersection Over Union Algorithm
+///
 pub fn vectorized_iou(
     boxes_a: Array2<f64>,
     boxes_b: Array2<f64>,
@@ -253,44 +256,6 @@ pub fn vectorized_iou(
     let area_inter = bot_right_top_left.map_axis(Axis(2), |x| x.product());
     let iou = area_inter.clone() / (area_a.insert_axis(Axis(1)) + area_b - area_inter);
     Ok(iou)
-}
-
-/// Convieience Function to draw bounding boxes to image
-pub fn draw_bounding_boxes_on_mut_image(
-    mut rgb_image: RgbImage,
-    vec_results: &Vec<InferenceResult>,
-    font: &Font<'static>,
-) -> RgbImage {
-    let color = Rgb([0u8, 0u8, 255u8]);
-
-    for result in vec_results {
-        let conf = result.confidence;
-
-        let rect: Rect = result.b_box.into();
-
-        draw_hollow_rect_mut(&mut rgb_image, rect, color);
-
-        let class_conf = format!("{} {}", result.class, conf);
-
-        // TODO: calc font size based on image dims
-        // let height = 12.4;
-        // let scale = Scale {
-        //     x: height * 2.0,
-        //     y: height,
-        // };
-
-        let scale = Scale::uniform(25.0);
-        draw_text_mut(
-            &mut rgb_image,
-            color,
-            rect.left() + 5,
-            rect.top() - 30,
-            scale,
-            &font,
-            &class_conf,
-        );
-    }
-    rgb_image
 }
 
 #[cfg(test)]
