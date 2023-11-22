@@ -2,6 +2,3 @@
 .vscode
 *target*
 /Cargo.lock
-*.pt
-*.torchscript
-*output.png

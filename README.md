@@ -52,12 +52,10 @@ https://wasmedge.org/docs/start/build-and-run/aot/
 
 
 ## Run Examples 
-### Image Inference  
+### Image Inference  example
 #### Build  
 From directory `./yolo-rs-wasm`  
 `cargo build --release --example image-inference`  
-  
-
 
 #### Run  
 From project root `./`  
