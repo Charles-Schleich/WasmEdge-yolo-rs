@@ -2,7 +2,10 @@ use std::fs;
 
 use clap::Parser;
 use image::ImageFormat;
-use yolo_rs::{utils::draw_bounding_boxes_on_mut_image, ConfThresh, IOUThresh, Yolo, YoloBuilder};
+use yolo_rs::{
+    utils::{self, draw_bounding_boxes_on_mut_image},
+    ConfThresh, IOUThresh, Yolo, YoloBuilder,
+};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -50,7 +53,11 @@ pub fn main() {
         .infer_image(&conf_thresh, &iou_thresh, &rgb_image)
         .unwrap();
     println!("Detection Results {:?}", vec_result);
-    let output_image = draw_bounding_boxes_on_mut_image(rgb_image, &vec_result, &yolo.font());
+    let output_image = draw_bounding_boxes_on_mut_image(
+        rgb_image,
+        &vec_result,
+        &utils::load_font("./yolo-rs-wasm/assets/ClearSans-Medium.ttf").unwrap(),
+    );
 
     output_image
         .save_with_format("output.png", ImageFormat::Png)

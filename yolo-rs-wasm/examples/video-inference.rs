@@ -1,7 +1,7 @@
 use clap::Parser;
 use log::LevelFilter;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
-use yolo_rs::{ConfThresh, IOUThresh, Yolo, YoloBuilder};
+use yolo_rs::{utils, ConfThresh, DrawBoundingBoxes, IOUThresh, Yolo, YoloBuilder};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -53,7 +53,9 @@ pub fn main() {
             args.output_video_path,
             &conf_thresh,
             &iou_thresh,
-            true,
+            DrawBoundingBoxes::TrueWithFont(
+                utils::load_font("./yolo-rs-wasm/assets/ClearSans-Medium.ttf").unwrap(),
+            ),
         )
         .unwrap();
 

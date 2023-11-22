@@ -6,13 +6,34 @@
 //! It supports both Image and Video inference.
 //!
 //! ### Usage
-//! TODO EXAMPLE
+//! ```rust
+//! let yolo: Yolo = YoloBuilder::new()
+//!     .classes_file(class_names_path)
+//!     .unwrap()
+//!     .execution_target(wasi_nn::ExecutionTarget::GPU)
+//!     .build_from_files([model_path])
+//!     .unwrap();
+//!
+//! let conf_thresh = ConfThresh(0.5);
+//!
+//! let iou_thresh = IOUThresh(0.5);
+//!
+//! // Load in the image
+//! let image_bytes = fs::read(image_path).unwrap();
+//!
+//! let rgb_image = image::load_from_memory(&image_bytes).unwrap().to_rgb8();
+//!
+//! let vec_result = yolo
+//!     .infer_image(&conf_thresh, &iou_thresh, &rgb_image)
+//!     .unwrap();
+//!
 //! ```
 //!
 //! ### Note
 //!
 //! This crate is in active development
-//!
+//! There are some features that are still being worked on.
+//! Please refer to the limitations section of the README file on the github repo.
 
 use image::{ImageBuffer, RgbImage};
 use imageproc::rect::Rect;
@@ -37,13 +58,9 @@ mod process;
 pub mod utils;
 mod video_proc;
 
-/// Testcomment
-
-/// Yolo Struct containing Graph, font for drawing and class names
-/// Can be reused after an inference has taken place.
+/// Yolo Struct containing Graph, Font for Drawing and class names.
 pub struct Yolo {
     // inference_type: YoloType
-    font: Font<'static>,
     graph: Graph,
     classes: Vec<String>,
 }
@@ -88,6 +105,11 @@ pub enum PostProcessingError {
     BroadcastArrayDims,
 }
 
+pub enum DrawBoundingBoxes {
+    TrueWithFont(Font<'static>),
+    False,
+}
+
 const INPUT_WIDTH: usize = 640;
 const INPUT_HEIGHT: usize = 640;
 const OUTPUT_CLASSES: usize = 80;
@@ -113,12 +135,8 @@ impl IOUThresh {
 
 impl Yolo {
     /// Creates a new instance of YOLO, including graph and classes
-    pub fn new(graph: Graph, classes: Vec<String>, font: Font<'static>) -> Self {
-        Yolo {
-            graph,
-            classes,
-            font,
-        }
+    pub fn new(graph: Graph, classes: Vec<String>) -> Self {
+        Yolo { graph, classes }
     }
 
     // Convienence function to run load file and poarse as image
@@ -128,9 +146,9 @@ impl Yolo {
         Ok(image::load_from_memory(&image_bytes)?.to_rgb8())
     }
 
-    pub fn font(self) -> Font<'static> {
-        self.font
-    }
+    // pub fn font(self) -> Font<'static> {
+    //     self.font
+    // }
 
     pub fn infer_file<P: AsRef<Path>>(
         self,
@@ -157,7 +175,7 @@ impl Yolo {
         output_path: P,
         conf_thresh: &ConfThresh,
         iou_thresh: &IOUThresh,
-        draw_bounding_boxes: bool,
+        draw_bounding_boxes: DrawBoundingBoxes,
     ) -> Result<Vec<Vec<InferenceResult>>, YoloRuntimeError> {
         // TODO Maybe check for existence of plugin before attempting to call functions
         debug!("Start Proc Video");
@@ -246,14 +264,10 @@ impl Yolo {
 
                 info!("Processing Frame {idx}, #Detections {}", vec_results.len());
 
-                if draw_bounding_boxes {
+                if let DrawBoundingBoxes::TrueWithFont(font) = &draw_bounding_boxes {
                     // I am discarding the result as this is a convienence post processing function
                     // Also available for the user if they wish to use it
-                    let _ = utils::draw_bounding_boxes_on_mut_image(
-                        image_buf,
-                        &vec_results,
-                        &self.font,
-                    );
+                    let _ = utils::draw_bounding_boxes_on_mut_image(image_buf, &vec_results, font);
                 }
 
                 vec_results_by_frame.push(vec_results);
@@ -354,6 +368,9 @@ pub enum BuildError {
 
     #[error("error reading file containing classes")]
     FileError(#[from] std::io::Error),
+
+    #[error("File / bytes provided to rusttype::Font could not be parsed as font")]
+    InvalidFontData,
 }
 
 /// Builder Pattern for Yolo Execution Context
@@ -409,12 +426,6 @@ impl YoloBuilder {
         Ok(self)
     }
 
-    // TODO remove unwrap
-    fn load_font() -> Font<'static> {
-        let font_data: &[u8] = include_bytes!("../assets/ClearSans-Medium.ttf");
-        Font::try_from_bytes(font_data).unwrap()
-    }
-
     #[inline(always)]
     pub fn build_from_bytes<B>(self, bytes_array: impl AsRef<[B]>) -> Result<Yolo, BuildError>
     where
@@ -425,7 +436,7 @@ impl YoloBuilder {
                 let graph = wasi_nn::GraphBuilder::new(self.graph_encoding, self.execution_target)
                     .build_from_bytes(bytes_array)?;
 
-                Ok(Yolo::new(graph, classes, YoloBuilder::load_font()))
+                Ok(Yolo::new(graph, classes))
             }
             None => Err(BuildError::MissingClasses),
         }
@@ -440,7 +451,7 @@ impl YoloBuilder {
             Some(classes) => {
                 let graph = wasi_nn::GraphBuilder::new(self.graph_encoding, self.execution_target)
                     .build_from_files(files)?;
-                Ok(Yolo::new(graph, classes, YoloBuilder::load_font()))
+                Ok(Yolo::new(graph, classes))
             }
             None => Err(BuildError::MissingClasses),
         }

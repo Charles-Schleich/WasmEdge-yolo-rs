@@ -2,12 +2,9 @@ use std::collections::HashSet;
 
 use crate::prepare::ResizeScale;
 use crate::{ConfThresh, IOUThresh, InferenceResult, PostProcessingError, YoloRuntimeError};
-use image::{Rgb, RgbImage};
-use imageproc::drawing::{draw_hollow_rect_mut, draw_text_mut};
 use imageproc::rect::Rect;
 use itertools::Itertools;
 use ndarray::{s, Array2, ArrayView, Axis, Dim, Zip};
-use rusttype::{Font, Scale};
 
 /// Function to process output tensor from YOLOv8 Detection Model
 // TODO: more efficient parsing: remove transpose convert from buffer directly to
@@ -183,7 +180,7 @@ pub(crate) fn non_maximum_supression(
 }
 
 // Calculate intersection over union for rectangle
-pub fn iou(box1: Rect, box2: Rect) -> f32 {
+pub fn _iou(box1: Rect, box2: Rect) -> f32 {
     let area = |r: Rect| r.width() * r.height();
 
     let area1 = area(box1);
@@ -260,7 +257,7 @@ pub fn vectorized_iou(
 
 #[cfg(test)]
 mod tests {
-    use crate::process::{bboxes_to_ndarray, iou, vectorized_iou};
+    use crate::process::{_iou, bboxes_to_ndarray, vectorized_iou};
     use imageproc::rect::Rect;
     use ndarray::array;
 
@@ -271,7 +268,7 @@ mod tests {
         // top left (2,2)  bot right (3,3)
         let box2 = Rect::at(2, 2).of_size(1, 1);
 
-        let iou_out = iou(box1, box2);
+        let iou_out = _iou(box1, box2);
 
         assert_eq!(iou_out, 0.25);
 
@@ -279,7 +276,7 @@ mod tests {
         let box1 = Rect::at(1, 1).of_size(3, 3);
         // top left (2,2)  bot right (5,5)
         let box2 = Rect::at(2, 2).of_size(3, 3);
-        let iou_out = iou(box1, box2);
+        let iou_out = _iou(box1, box2);
 
         assert_eq!(iou_out, 0.2857143);
     }
