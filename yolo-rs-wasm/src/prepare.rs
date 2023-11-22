@@ -1,4 +1,4 @@
-use image::{GenericImage, RgbImage};
+use image::{GenericImage, ImageError, RgbImage};
 
 // Function to normalize and resize image for YOLO
 const SIZE: usize = 640;
@@ -8,7 +8,9 @@ type Channel = Vec<Vec<f32>>;
 #[derive(Debug)]
 pub struct ResizeScale(pub f32);
 
-pub(crate) fn pre_process_image(image: &RgbImage) -> ([Channel; 3], ResizeScale) {
+pub(crate) fn pre_process_image(
+    image: &RgbImage,
+) -> Result<([Channel; 3], ResizeScale), ImageError> {
     let input_width = image.width();
     let input_height = image.height();
 
@@ -37,7 +39,7 @@ pub(crate) fn pre_process_image(image: &RgbImage) -> ([Channel; 3], ResizeScale)
     // and we want to keep the aspect ratio of the original image
     // So we fill the remaining pixels with black,
     let mut resized_640x640 = RgbImage::new(SIZE_U32, SIZE_U32);
-    resized_640x640.copy_from(&resized, 0, 0).unwrap();
+    resized_640x640.copy_from(&resized, 0, 0)?;
 
     // Split intoChannels
     let mut red: Channel = vec![vec![0.0; SIZE]; SIZE];
@@ -58,5 +60,5 @@ pub(crate) fn pre_process_image(image: &RgbImage) -> ([Channel; 3], ResizeScale)
     let final_tensor: [Vec<Vec<f32>>; 3];
     final_tensor = [red, green, blue];
 
-    (final_tensor, resize_scale)
+    Ok((final_tensor, resize_scale))
 }

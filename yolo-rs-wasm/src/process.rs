@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::prepare::ResizeScale;
-use crate::{ConfThresh, IOUThresh, InferenceResult, PostProcessingError, RuntimeError};
+use crate::{ConfThresh, IOUThresh, InferenceResult, PostProcessingError, YoloRuntimeError};
 use image::{Rgb, RgbImage};
 use imageproc::drawing::{draw_hollow_rect_mut, draw_text_mut};
 use imageproc::rect::Rect;
@@ -42,26 +42,44 @@ pub(crate) fn apply_confidence_and_scale(
     for (_, row) in rows.iter().enumerate() {
         // Get maximum likeliehood for each detection
         // Iterator of only class probabilities
-        let mut prob_iter = row.clone().into_iter().skip(4);
-        let max = prob_iter.clone().reduce(|a, b| a.max(b)).unwrap();
+        // Skip [x,y,w,h]
+        let prob_iter = row.iter().skip(4).collect::<Vec<&f32>>();
+        // TODO: write as one line with proper move semantics
+        // let opt_max: Option<&&f32> = prob_iter.iter().reduce(|a, b| (a).max(b));
+        // let max = match opt_max {
+        //     Some(max) if *max < conf_thresh.0 => continue,
+        //     None => continue,
+        //     Some(max) => max.clone(),
+        // };
 
+        let mut max = f32::MIN;
+        for &item in prob_iter.iter() {
+            if item > &max {
+                max = *item;
+            }
+        }
         if max < conf_thresh.0 {
             continue;
         }
 
-        let index = prob_iter.position(|element| element == max).unwrap();
-        let class = classes.get(index).unwrap().to_string();
+        let class = match prob_iter
+            .into_iter()
+            .position(|element| *element == max)
+            .and_then(|idx| classes.get(idx))
+        {
+            Some(x) => x.to_string(),
+            None => {
+                continue;
+            }
+        };
 
         // The output of the x and y cooridnates are at the CENTER of the bounding box
         // which means if we want to get them to the top left hand corners,
         // we must shift x by width * 0.5, and y by height * 0.5
-        // TODO remove allocation of raw_w
-        let raw_w = row[2];
-        let raw_h = row[3];
-        let x = ((row[0] - 0.5 * raw_w) * scale.0).round() as u32;
-        let y = ((row[1] - 0.5 * raw_h) * scale.0).round() as u32;
-        let w = (raw_w * scale.0).round() as u32;
-        let h = (raw_h * scale.0).round() as u32;
+        let x = ((row[0] - 0.5 * row[2]) * scale.0).round() as u32;
+        let y = ((row[1] - 0.5 * row[3]) * scale.0).round() as u32;
+        let w = (row[2] * scale.0).round() as u32;
+        let h = (row[3] * scale.0).round() as u32;
 
         results.push(InferenceResult {
             b_box: Rect::at(x as i32, y as i32).of_size(w, h),
@@ -83,6 +101,7 @@ fn transpose<T>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
         .map(|_| {
             iters
                 .iter_mut()
+                // TODO remove unwrap in Next
                 .map(|n| n.next().unwrap())
                 .collect::<Vec<T>>()
         })
@@ -93,7 +112,7 @@ fn transpose<T>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
 pub(crate) fn non_maximum_supression(
     iou_thresh: &IOUThresh,
     mut results: Vec<InferenceResult>,
-) -> Result<Vec<InferenceResult>, RuntimeError> {
+) -> Result<Vec<InferenceResult>, YoloRuntimeError> {
     results.sort_by(|x, y| y.confidence.total_cmp(&x.confidence));
 
     // TODO make computation more efficient
@@ -188,14 +207,14 @@ pub fn bboxes_to_ndarray(arr_b_boxes: Vec<[f64; 4]>) -> Array2<f64> {
         data.extend_from_slice(&arr_b_boxes[i]);
         nrows += 1;
     }
-
+    // TODO Remove In case of Unwrap
     Array2::from_shape_vec((nrows, ncols), data).unwrap()
 }
 
 pub fn vectorized_iou(
     boxes_a: Array2<f64>,
     boxes_b: Array2<f64>,
-) -> Result<Array2<f64>, RuntimeError> {
+) -> Result<Array2<f64>, YoloRuntimeError> {
     // TODO See if i can more make use of references and not allocate new arrays
 
     let box_area =
@@ -210,7 +229,7 @@ pub fn vectorized_iou(
     let a_top_left = boxes_a_new_axis.slice(s![.., .., ..2]);
 
     let a_top_left_bc = a_top_left.broadcast((num_boxes, num_boxes, 2)).ok_or(
-        RuntimeError::PostProcessingError(PostProcessingError::BroadcastArrayDims),
+        YoloRuntimeError::PostProcessingError(PostProcessingError::BroadcastArrayDims),
     )?;
     let b_top_left = boxes_b.slice(s![.., ..2]);
 
@@ -221,6 +240,7 @@ pub fn vectorized_iou(
 
     let a_bot_right = boxes_a_new_axis.slice(s![.., .., 2..]);
     let b_bot_right = boxes_b.slice(s![.., 2..]);
+    // TODO Remove Unwrap in case of Impossible Broadcast
     let a_bot_right_bc = a_bot_right.broadcast((num_boxes, num_boxes, 2)).unwrap();
 
     // Elementwise minumum

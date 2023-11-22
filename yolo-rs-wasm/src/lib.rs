@@ -24,6 +24,8 @@ pub struct Yolo {
     graph: Graph,
     classes: Vec<String>,
 }
+
+// TODO  implement Processing for Pose And Segment models
 pub enum YoloType {
     Pose,
     Segment,
@@ -31,7 +33,7 @@ pub enum YoloType {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum RuntimeError {
+pub enum YoloRuntimeError {
     #[error("image error")]
     ImageError(#[from] image::ImageError),
 
@@ -49,6 +51,9 @@ pub enum RuntimeError {
 
     #[error("video plugin: assemble frames")]
     VideoAssemble,
+
+    #[error("video plugin: Video plugin did not write image bytes back to main memory")]
+    VideoPluginImageWriteError,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -89,7 +94,7 @@ impl Yolo {
     }
 
     // Convienence function to run load file and poarse as image
-    fn load_image_from_file<P: AsRef<Path>>(image_path: P) -> Result<RgbImage, RuntimeError> {
+    fn load_image_from_file<P: AsRef<Path>>(image_path: P) -> Result<RgbImage, YoloRuntimeError> {
         let path = image_path.as_ref();
         let image_bytes: Vec<u8> = fs::read(path)?;
         Ok(image::load_from_memory(&image_bytes)?.to_rgb8())
@@ -104,7 +109,7 @@ impl Yolo {
         image_path: P,
         conf_thresh: &ConfThresh,
         iou_thresh: &IOUThresh,
-    ) -> Result<Vec<InferenceResult>, RuntimeError> {
+    ) -> Result<Vec<InferenceResult>, YoloRuntimeError> {
         let image_buffer = Yolo::load_image_from_file(image_path)?;
         self.infer(conf_thresh, iou_thresh, &image_buffer)
     }
@@ -126,7 +131,7 @@ impl Yolo {
         conf_thresh: &ConfThresh,
         iou_thresh: &IOUThresh,
         draw_bounding_boxes: bool,
-    ) -> Result<Vec<Vec<InferenceResult>>, RuntimeError> {
+    ) -> Result<Vec<Vec<InferenceResult>>, YoloRuntimeError> {
         self.process_video(
             video_path,
             output_path,
@@ -146,7 +151,7 @@ impl Yolo {
         conf_thresh: &ConfThresh,
         iou_thresh: &IOUThresh,
         draw_bounding_boxes: bool,
-    ) -> Result<Vec<Vec<InferenceResult>>, RuntimeError> {
+    ) -> Result<Vec<Vec<InferenceResult>>, YoloRuntimeError> {
         debug!("Start Proc Video");
 
         let mut vec_results_by_frame = Vec::new();
@@ -154,26 +159,26 @@ impl Yolo {
         // Checks if input path exists
         if !video_path.as_ref().exists() {
             let error = std::io::Error::from(ErrorKind::NotFound);
-            return Err(RuntimeError::from(error))?;
+            return Err(YoloRuntimeError::from(error))?;
         }
 
         let (mut filename, mut output_filename) =
             match (video_path.as_ref().to_str(), output_path.as_ref().to_str()) {
                 (None, None) => {
                     error!("Input and output Video file paths are not valid");
-                    return Err(RuntimeError::from(std::io::Error::from(
+                    return Err(YoloRuntimeError::from(std::io::Error::from(
                         ErrorKind::NotFound,
                     )))?;
                 }
                 (None, Some(_)) => {
                     error!("Output Video File Path Is not a valid String");
-                    return Err(RuntimeError::from(std::io::Error::from(
+                    return Err(YoloRuntimeError::from(std::io::Error::from(
                         ErrorKind::NotFound,
                     )))?;
                 }
                 (Some(_), None) => {
                     error!("Input Video File Path Is not a valid String");
-                    return Err(RuntimeError::from(std::io::Error::from(
+                    return Err(YoloRuntimeError::from(std::io::Error::from(
                         ErrorKind::NotFound,
                     )))?;
                 }
@@ -203,7 +208,7 @@ impl Yolo {
 
         if load_video_result != 0 {
             error!("Failure Loading Video {load_video_result}");
-            return Err(RuntimeError::VideoLoad);
+            return Err(YoloRuntimeError::VideoLoad);
         }
 
         let image_buf_size: usize = (width * height * 3) as usize;
@@ -227,9 +232,11 @@ impl Yolo {
             {
                 unsafe { yolo_rs_video_plugin::get_frame(idx, buf_ptr_raw, buf_len, buf_capacity) };
 
-                // TODO: Remove Unwrap
                 let image_buf: ImageBuffer<image::Rgb<u8>, Vec<u8>> =
-                    ImageBuffer::from_vec(width as u32, height as u32, image_buf).unwrap();
+                    match ImageBuffer::from_vec(width as u32, height as u32, image_buf) {
+                        Some(x) => x,
+                        None => return Err(YoloRuntimeError::VideoPluginImageWriteError),
+                    };
 
                 let vec_results: Vec<InferenceResult> =
                     self.infer(conf_thresh, iou_thresh, &image_buf)?;
@@ -264,7 +271,7 @@ impl Yolo {
 
         if output_video_assemble_code != 0 {
             error!("Failure Assembling Video {output_video_assemble_code}");
-            return Err(RuntimeError::VideoAssemble);
+            return Err(YoloRuntimeError::VideoAssemble);
         }
 
         info!("Finished Encoding Video : {}", output_filename);
@@ -277,9 +284,10 @@ impl Yolo {
         conf_thresh: &ConfThresh,
         iou_thresh: &IOUThresh,
         image_buffer: &RgbImage,
-    ) -> Result<Vec<InferenceResult>, RuntimeError> {
+    ) -> Result<Vec<InferenceResult>, YoloRuntimeError> {
+        // TODO Improve performance of this
         let (bytes, resize_scale): ([Vec<Vec<f32>>; 3], ResizeScale) =
-            prepare::pre_process_image(image_buffer);
+            prepare::pre_process_image(image_buffer)?;
 
         let tensor_data = bytes
             .into_iter()
@@ -289,22 +297,20 @@ impl Yolo {
             .flatten()
             .collect::<Vec<f32>>();
 
-        let mut context = self.graph.init_execution_context().unwrap();
+        let mut context = self.graph.init_execution_context()?;
 
-        context
-            .set_input(
-                0,
-                wasi_nn::TensorType::F32,
-                // Input
-                &[1, 3, self::INPUT_WIDTH, INPUT_HEIGHT],
-                &tensor_data,
-            )
-            .unwrap();
+        context.set_input(
+            0,
+            wasi_nn::TensorType::F32,
+            // Input
+            &[1, 3, self::INPUT_WIDTH, INPUT_HEIGHT],
+            &tensor_data,
+        )?;
 
         let mut output_buffer = vec![0f32; 1 * OUTPUT_OBJECTS * OUTPUT_CLASSES];
 
         // Execute the inference.
-        context.compute().unwrap();
+        context.compute()?;
         context.get_output(0, &mut output_buffer)?;
 
         // Process inference results into Vector of Results
