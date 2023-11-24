@@ -58,8 +58,7 @@ pub(crate) fn pre_process_image(
         }
     }
 
-    let final_tensor: [Vec<Vec<f32>>; 3];
-    final_tensor = [red, green, blue];
+    let final_tensor: [Vec<Vec<f32>>; 3]= [red, green, blue];
 
     Ok((final_tensor, resize_scale))
 }

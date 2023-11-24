@@ -44,7 +44,7 @@ pub(crate) struct VideoEncoder {
 
 impl VideoEncoder {
     pub fn new(v_info: &VideoInfo, output_file: &String) -> Result<Self, VideoEncoderError> {
-        let mut octx = format::output(&output_file)?;
+        let mut octx = format::output(output_file)?;
 
         let global_header = octx.format().flags().contains(format::Flags::GLOBAL_HEADER);
         let mut ost: ffmpeg::StreamMut<'_> = octx.add_stream()?;
@@ -79,7 +79,7 @@ impl VideoEncoder {
         }
 
         octx.set_metadata(v_info.input_stream_meta_data.clone());
-        format::context::output::dump(&octx, 0, Some(&output_file));
+        format::context::output::dump(&octx, 0, Some(output_file));
         octx.write_header()?;
 
         // Write Every Frame out to encoder packet
@@ -133,7 +133,7 @@ impl VideoEncoder {
 
     pub fn receive_and_process_decoded_frames(
         &mut self,
-        frames: &mut Vec<(frame::Video, picture::Type, Option<i64>)>,
+        frames: &mut [(frame::Video, picture::Type, Option<i64>)],
     ) -> Result<(), VideoEncoderError> {
         let duration: Time = Duration::from_nanos(1_000_000_000 / self.frame_rate as u64).into();
 
@@ -153,6 +153,8 @@ impl VideoEncoder {
             let mut frame_yuv420 = self.scale(out_frame_rgb)?;
 
             // TODO Fix Encoding here
+            // This will result in HUGE, essentially uncompressed video files,
+            // If the bit rate is set to (Single Frame Byte amount) * number of Frames
             frame_yuv420.set_kind(picture::Type::I);
 
             debug!(
@@ -180,12 +182,12 @@ impl VideoEncoder {
 
         self.finish()?;
 
-        return Ok(());
+        Ok(())
     }
 
     fn scale(&mut self, frame: &mut AVFrame) -> Result<AVFrame, FFmpegError> {
         let mut frame_scaled = AVFrame::empty();
-        self.scaler.run(&frame, &mut frame_scaled)?;
+        self.scaler.run(frame, &mut frame_scaled)?;
 
         // Copy over PTS from old frame.
         frame_scaled.set_pts(frame.pts());

@@ -19,9 +19,8 @@ pub fn process_output_buffer_to_tensor(buffer: &[f32]) -> Vec<Vec<f32>> {
         columns.push(col_vec);
     }
 
-    // transpose 84 rows x 8400 columns as a single Vec of f32
-    let rows = transpose(columns);
-    rows
+    // Transpose 84 rows x 8400 columns as a single Vec of f32
+    transpose(columns)
 }
 
 /// Row Format is
@@ -33,7 +32,7 @@ pub fn process_output_buffer_to_tensor(buffer: &[f32]) -> Vec<Vec<f32>> {
 pub(crate) fn apply_confidence_and_scale(
     rows: Vec<Vec<f32>>,
     conf_thresh: &ConfThresh,
-    classes: &Vec<String>,
+    classes: &[String],
     scale: ResizeScale,
 ) -> Vec<InferenceResult> {
     let mut results = Vec::new();
@@ -201,10 +200,11 @@ pub fn bboxes_to_ndarray(arr_b_boxes: Vec<[f64; 4]>) -> Array2<f64> {
     let ncols = arr_b_boxes.first().map_or(0, |row| row.len());
     let mut nrows = 0;
 
-    for i in 0..arr_b_boxes.len() {
-        data.extend_from_slice(&arr_b_boxes[i]);
+    for b_box in arr_b_boxes {
+        data.extend_from_slice(&b_box);
         nrows += 1;
     }
+
     // TODO Remove In case of Unwrap
     Array2::from_shape_vec((nrows, ncols), data).unwrap()
 }
@@ -221,8 +221,8 @@ pub fn vectorized_iou(
         |bbox: ArrayView<f64, Dim<[usize; 1]>>| (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]);
     let (num_boxes, _elems_per_box) = boxes_a.dim();
 
-    let area_a = boxes_a.map_axis(Axis(1), |row| box_area(row));
-    let area_b = boxes_b.map_axis(Axis(1), |row| box_area(row));
+    let area_a = boxes_a.map_axis(Axis(1), box_area);
+    let area_b = boxes_b.map_axis(Axis(1), box_area);
 
     let boxes_a_new_axis = boxes_a.clone().insert_axis(Axis(1));
     // let boxes_b_new_axis = boxes_b.clone();

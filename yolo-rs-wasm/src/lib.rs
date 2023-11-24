@@ -336,7 +336,7 @@ impl Yolo {
             &tensor_data,
         )?;
 
-        let mut output_buffer = vec![0f32; 1 * OUTPUT_OBJECTS * OUTPUT_CLASSES];
+        let mut output_buffer = vec![0f32; OUTPUT_OBJECTS * OUTPUT_CLASSES];
 
         // Execute the inference.
         context.compute()?;
@@ -348,7 +348,7 @@ impl Yolo {
         let vec_results =
             apply_confidence_and_scale(output_tensor, conf_thresh, &self.classes, resize_scale);
 
-        if vec_results.len() == 0 {
+        if vec_results.is_empty() {
             return Ok(vec_results);
         }
         let vec_results = non_maximum_supression(iou_thresh, vec_results)?;
@@ -379,6 +379,12 @@ pub struct YoloBuilder {
     graph_encoding: GraphEncoding,
     execution_target: ExecutionTarget,
     classes: Option<Vec<String>>,
+}
+
+impl Default for YoloBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl YoloBuilder {

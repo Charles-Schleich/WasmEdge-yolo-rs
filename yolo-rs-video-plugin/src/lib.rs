@@ -144,7 +144,7 @@ trait TryGetPointer {
 
 impl TryGetPointer for Memory {
     fn try_get_ptr<T>(&mut self, offset: u32, len: u32) -> Result<*mut T, HostFuncError> {
-        match self.data_pointer_mut(offset as u32, len) {
+        match self.data_pointer_mut(offset, len) {
             Ok(x) => Ok(x as *mut T),
             Err(err) => {
                 error!("Error Getting Value from Pointer {}", err);
@@ -200,7 +200,7 @@ fn load_video_to_host_memory(
     let res = match decode_video::dump_frames(&filename) {
         Ok((frames, video_info)) => {
             debug!("Input Frame Count {}", frames.len());
-            if frames.len() > 0 {
+            if frames.is_empty() {
                 unsafe {
                     *width_ptr_main_memory = frames[0].input_frame.width();
                     *height_ptr_main_memory = frames[0].input_frame.height();
@@ -389,7 +389,7 @@ fn assemble_output_frames_to_video(
 
     // Check Frames have all been Written
     // Save Indexes of frames that have not been written
-    let (mut frames, missing_frames) = frames.into_iter().enumerate().fold(
+    let (mut frames, missing_frames) = frames.iter_mut().enumerate().fold(
         (Vec::new(), Vec::new()),
         |(mut iter_frames, mut iter_missing), (idx, frame_map)| {
             match frame_map.output_frame.as_mut() {
@@ -403,12 +403,12 @@ fn assemble_output_frames_to_video(
         },
     );
 
-    if missing_frames.len() > 0 {
+    if missing_frames.is_empty() {
         error!("Error Missing Frames {:?} ", missing_frames);
         return Err(HostFuncError::User(1));
     }
 
-    let mut video_encoder = encode_video::VideoEncoder::new(&video_info, &output_file)
+    let mut video_encoder = encode_video::VideoEncoder::new(video_info, &output_file)
         .map_err(|_| HostFuncError::User(1))?;
 
     if let Err(err) = video_encoder.receive_and_process_decoded_frames(&mut frames) {

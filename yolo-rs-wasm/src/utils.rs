@@ -19,7 +19,7 @@ pub fn draw_bounding_boxes_on_mut_image(
     for result in vec_results {
         let conf = result.confidence;
 
-        let rect: Rect = result.b_box.into();
+        let rect: Rect = result.b_box;
 
         draw_hollow_rect_mut(&mut rgb_image, rect, color);
 
@@ -39,7 +39,7 @@ pub fn draw_bounding_boxes_on_mut_image(
             rect.left() + 5,
             rect.top() - 30,
             scale,
-            &font,
+            font,
             &class_conf,
         );
     }
