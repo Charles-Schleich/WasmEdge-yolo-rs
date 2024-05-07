@@ -35,7 +35,6 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     pkg-config
 ```
 
-
 ### Optimizing the WASM Binary in the examples  
 Rust outputs unoptimized wasm by default, wasmedge has an Ahead of Time compiler that can improve the performance significantly !
 
@@ -85,7 +84,6 @@ wasmedge --dir .:. \
   --output-video-path ./yolo-rs-wasm/example_inputs/times_square_output.mp4 \
   --class-names-path ./yolo-rs-wasm/example_inputs/class_names
 ```
-
 
 #### Limitations / TODO's
 - This library and plugin are intended to be used with the WasmEdge runtime only.

@@ -21,6 +21,7 @@ struct Args {
     /// image path
     #[arg(short, long)]
     image_path: String,
+    
 }
 
 pub fn main() {

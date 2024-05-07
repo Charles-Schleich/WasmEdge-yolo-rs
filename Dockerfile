@@ -1,15 +1,20 @@
 FROM wasmedge/wasmedge:ubuntu-build-gcc-plugins-deps
+# FROM wasmedge/wasmedge:ubuntu-build-clang-plugins-deps
 
 WORKDIR /app/
 
 ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN apt-get upgrade -y
 RUN apt-get update
 
 RUN apt-get install -y \
     build-essential \
     curl \
     clang \ 
-    pkg-config \ 
+    pkg-config 
+
+RUN apt-get install -y \
     libavcodec-dev \ 
     libavformat-dev \ 
     libavfilter-dev \ 

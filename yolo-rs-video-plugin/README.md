@@ -16,7 +16,7 @@ https://wasmedge.org/docs/start/install
 ### Optimizing the WASM Binary in the examples  
 Rust outputs unoptimized wasm by default, wasmedge has an Ahead of Time compiler that can improve the performance significantly !
 
-`wasmedge compile ./target/wasm32-wasi/release/examples/image-inference.wasm ./image-inference-optimized.wasm`
+`wasmedge compile ./target/wasm32-wasi/release/examples/video-inference.wasm ./video-inference-optimized.wasm`
 
 If you are running into performance issues with your WASM binary, consider this a first port of call for improving your runtime execution. 
 
@@ -39,8 +39,7 @@ From project root `./`
 WASMEDGE_PLUGIN_PATH=./target/x86_64-unknown-linux-gnu/release/libyolo_rs_video_plugin.so   \
 wasmedge --dir .:. \
   ./video-inference-optimized.wasm \
-  --model-path ./yolo-rs-wasm/example_inputs/yolov8n.torchscript \
-  --input-video-path ./yolo-rs-wasm/example_inputs/times_square.mp4 \
+  --model-path ./yolo-rs-wasm/example_inputs/yolov8n.torchscript \  --input-video-path ./yolo-rs-wasm/example_inputs/times_square.mp4 \
   --output-video-path ./yolo-rs-wasm/example_inputs/times_square_output.mp4 \
   --class-names-path ./yolo-rs-wasm/example_inputs/class_names
 ```
