@@ -44,7 +44,7 @@ FROM rust:1.78 as yolo_rs_builder
 WORKDIR /app/
 
 # TODO DELETE - FOR DEBUGGING PURPOSES ONLY
-RUN apt-get update && apt install fzf
+RUN apt-get update && apt install -y fzf clang
 
 # ONLY IF I NEED TO INSTALL WASM-SDK
 # ENV WASI_VERSION=20
@@ -63,10 +63,10 @@ RUN mkdir -p /opt/wasi-sdk/share/wasi-sysroot/lib
 COPY --from=WASI_SDK /wasi-sysroot/lib /opt/wasi-sdk/share/wasi-sysroot/lib
 COPY --from=WASI_SDK /wasi-sysroot/include /opt/wasi-sdk/share/wasi-sysroot/include
 # Copy for clang_rt.builtins-wasm32
-RUN mkdir -p /opt/wasi-sdk/lib/clang
-RUN mkdir -p /opt/wasi-sdk/lib/llvm-17  
-COPY --from=WASI_SDK /lib/clang /opt/wasi-sdk/lib/clang
-COPY --from=WASI_SDK /lib/llvm-17 /opt/wasi-sdk/lib/llvm-17
+RUN mkdir -p /lib/clang
+RUN mkdir -p /lib/llvm-17  
+COPY --from=WASI_SDK /lib/clang /lib/clang
+COPY --from=WASI_SDK /lib/llvm-17 /lib/llvm-17
 
 # RUN apt-get upgrade -y
 # RUN apt-get update
@@ -74,26 +74,8 @@ COPY --from=WASI_SDK /lib/llvm-17 /opt/wasi-sdk/lib/llvm-17
 RUN rustup target add wasm32-wasi
 COPY yolo-rs-wasm/ yolo-rs-wasm
 COPY yolo-rs-video-plugin/ yolo-rs-video-plugin
-
-# RUN cd yolo-rs-wasm/ && cargo build --target wasm32-wasi --release --examples
-# RUN cd yolo-rs-video-plugin/ && cargo build --release
+# clang_rt.builtins-wasm32
+RUN cd yolo-rs-wasm/ && cargo build --target wasm32-wasi --release --examples
+RUN cd yolo-rs-video-plugin/ && cargo build --release
 
 ################################################################################
-
-# Output WasmEdge 
-
-# FROM wasmedge/wasmedge:ubuntu-build-gcc-plugins-deps
-
-# SHELL [ "/bin/bash", "-c" ]
-# ENV SHELL=/bin/bash
-
-# ENV PATH="/root/.cargo/bin:${PATH}"
-
-# RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s  -- -y
-# RUN ls
-# RUN echo "$SHELL" 
-
-# RUN source "$HOME/.cargo/env" 
-# RUN cat "$HOME/.cargo/env" 
-
-# FROM wasmedge/wasmedge:ubuntu-build-gcc-plugins-deps

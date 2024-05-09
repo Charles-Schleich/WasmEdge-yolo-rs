@@ -1,14 +1,3 @@
 [build]
 # default target
 target = "wasm32-wasi"
-
-rustflags = [
-    "-L",
-    "/opt/wasi-sdk/lib/clang/16/lib/wasi/",
-    "-l",
-    "clang_rt.builtins-wasm32",
-    "-L",
-    "/opt/wasi-sdk/share/wasi-sysroot/lib/wasm32-wasi",
-    "-l",
-    "wasi-emulated-process-clocks",
-]
