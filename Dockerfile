@@ -28,6 +28,7 @@ RUN make -j10 all
 RUN make install
 
 ################################################################################
+
 FROM ghcr.io/webassembly/wasi-sdk as WASI_SDK
 
 ################################################################################
@@ -42,30 +43,39 @@ FROM rust:1.78 as yolo_rs_builder
 
 WORKDIR /app/
 
+# TODO DELETE - FOR DEBUGGING PURPOSES ONLY
+RUN apt-get update && apt install fzf
+
 # ONLY IF I NEED TO INSTALL WASM-SDK
 # ENV WASI_VERSION=20
 # ENV WASI_VERSION_FULL=${WASI_VERSION}.0
 # RUN wget https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_VERSION}/wasi-sdk-${WASI_VERSION_FULL}-linux.tar.gz
 # tar xvf wasi-sdk-${WASI_VERSION_FULL}-linux.tar.gz
 
+# Install FFMPEG from earlier build.
 COPY --from=ffmpeg /usr/local/lib /usr/local/lib
 COPY --from=ffmpeg /usr/local/include /usr/local/include
 COPY --from=ffmpeg /usr/local/share/ffmpeg /usr/local/share/ffmpeg
 
-COPY --from=WASI_SDK /wasi_sysroot/lib /opt/wasi-sdk/share/lib
-COPY --from=WASI_SDK /wasi_sysroot/include /opt/wasi-sdk/share/include
-# COPY --from=WASI_SDK /wasi_sysroot/share/ffmpeg /usr/local/share/ffmpeg
+# Copy for wasi-emulated-process-clocks
+RUN mkdir -p /opt/wasi-sdk/share/wasi-sysroot/include
+RUN mkdir -p /opt/wasi-sdk/share/wasi-sysroot/lib
+COPY --from=WASI_SDK /wasi-sysroot/lib /opt/wasi-sdk/share/wasi-sysroot/lib
+COPY --from=WASI_SDK /wasi-sysroot/include /opt/wasi-sdk/share/wasi-sysroot/include
+# Copy for clang_rt.builtins-wasm32
+RUN mkdir -p /opt/wasi-sdk/lib/clang
+RUN mkdir -p /opt/wasi-sdk/lib/llvm-17  
+COPY --from=WASI_SDK /lib/clang /opt/wasi-sdk/lib/clang
+COPY --from=WASI_SDK /lib/llvm-17 /opt/wasi-sdk/lib/llvm-17
 
-RUN apt-get upgrade -y
-RUN apt-get update
-
-RUN rustup --version
+# RUN apt-get upgrade -y
+# RUN apt-get update
 
 RUN rustup target add wasm32-wasi
 COPY yolo-rs-wasm/ yolo-rs-wasm
 COPY yolo-rs-video-plugin/ yolo-rs-video-plugin
 
-RUN cd yolo-rs-wasm/ && cargo build --target wasm32-wasi --release --examples
+# RUN cd yolo-rs-wasm/ && cargo build --target wasm32-wasi --release --examples
 # RUN cd yolo-rs-video-plugin/ && cargo build --release
 
 ################################################################################
