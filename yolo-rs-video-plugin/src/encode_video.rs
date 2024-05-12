@@ -1,19 +1,18 @@
 use std::time::Duration;
 
-use ffmpeg::{
-    codec,
-    format::{self, Pixel},
-    frame, picture, Dictionary, Packet, Rational,
+use ffmpeg_next::{
+    codec::{self, Parameters},
+    encoder::Video as AVEncoder,
+    format::{self, context::output::Output, Pixel},
+    frame, picture,
+    software::scaling::{Context as Scaler, Flags},
+    util::frame::video::Video as AVFrame,
+    Dictionary, Error as FFmpegError, Packet, Rational,
 };
 
-use ffmpeg::software::scaling::{Context as Scaler, Flags};
-use ffmpeg::util::frame::video::Video as AVFrame;
 use log::{debug, error, warn};
 
 use std::collections::BTreeMap;
-
-use ffmpeg::encoder::Video as AVEncoder;
-use ffmpeg::Error as FFmpegError;
 
 use crate::{time::Time, VideoInfo};
 
@@ -31,9 +30,9 @@ impl From<FFmpegError> for VideoEncoderError {
 
 pub(crate) struct VideoEncoder {
     // Encoder
-    encoder: ffmpeg::encoder::Video,
+    encoder: AVEncoder,
     // Output Context
-    octx: ffmpeg::format::context::output::Output,
+    octx: Output,
     // Output Time Base
     _packet_order_map: BTreeMap<i64, Packet>, // ost_time_bases: Vec<Rational>,
     // Frame scaler / Converter between formats
@@ -47,19 +46,19 @@ impl VideoEncoder {
         let mut octx = format::output(output_file)?;
 
         let global_header = octx.format().flags().contains(format::Flags::GLOBAL_HEADER);
-        let mut ost: ffmpeg::StreamMut<'_> = octx.add_stream()?;
-
-        // let codec = ffmpeg::encoder::find_by_name("libx264").unwrap();
-        let codec = ffmpeg::encoder::find(codec::Id::H264).ok_or(VideoEncoderError::CodecError(
-            "Could not Find Codec h264".into(),
-        ))?;
-
-        let mut encoder = ffmpeg::codec::Encoder::new(codec)?.video()?;
-
+        //
+        let codec = ffmpeg_next::encoder::find(codec::Id::H264).ok_or(
+            VideoEncoderError::CodecError("Could not Find Codec h264".into()),
+        )?;
+        //
+        let mut ost: ffmpeg_next::StreamMut<'_> = octx.add_stream(codec)?;
+        //
+        let mut encoder = ffmpeg_next::codec::encoder::new().video()?;
+        //
         encoder.set_height(v_info.height.0);
         encoder.set_width(v_info.width.0);
         encoder.set_format(v_info.format);
-        encoder.set_time_base(Some(ffmpeg::rescale::TIME_BASE));
+        encoder.set_time_base(ffmpeg_next::rescale::TIME_BASE);
         encoder.set_frame_rate(v_info.frame_rate.0);
 
         // Keeping the Bit Rate VERY high to not loose information
@@ -72,7 +71,9 @@ impl VideoEncoder {
 
         let mut encoder: AVEncoder = encoder.open_with(dict)?;
 
-        ost.set_parameters(encoder.parameters());
+        let params: Parameters = ffmpeg_next::codec::parameters::Parameters::new();
+        // TODO: what ? :)
+        ost.set_parameters(params);
 
         if global_header {
             encoder.set_flags(codec::Flags::GLOBAL_HEADER);
@@ -141,11 +142,7 @@ impl VideoEncoder {
 
         for (_idx, (out_frame_rgb, _frame_type, _)) in frames.iter_mut().enumerate() {
             let frame_timestamp_rescale = position
-                .aligned_with_rational(
-                    self.encoder
-                        .time_base()
-                        .unwrap_or(ffmpeg::rescale::TIME_BASE),
-                )
+                .aligned_with_rational(self.encoder.time_base())
                 .into_value();
 
             out_frame_rgb.set_pts(frame_timestamp_rescale);
@@ -158,9 +155,10 @@ impl VideoEncoder {
             frame_yuv420.set_kind(picture::Type::I);
 
             debug!(
-                "F Send {:?} {}",
+                "F Send {:?}",
                 frame_yuv420.pts(),
-                frame_yuv420.display_number()
+                // frame_yuv420.display_number()
+
             );
             self.encoder.send_frame(&frame_yuv420)?;
 
@@ -226,7 +224,6 @@ impl VideoEncoder {
         let encode_result = self.encoder.receive_packet(&mut packet);
         match encode_result {
             Ok(()) => Ok(Some(packet)),
-            Err(FFmpegError::Io(_errno)) => Ok(None),
             Err(err) => Err(err), // TODO process properly
         }
     }
@@ -243,14 +240,12 @@ impl VideoEncoder {
 
         packet.rescale_ts(
             self.encoder
-                .time_base()
-                .unwrap_or(ffmpeg::rescale::TIME_BASE),
+                .time_base(),
             // TODO: Will Defaulting to TIME_BASE cause a potential source of errors here ?
             self.octx
                 .stream(0)
                 .expect("Could not Find Stream at index")
-                .time_base()
-                .unwrap_or(ffmpeg::rescale::TIME_BASE),
+                .time_base(),
         );
 
         debug!("P Write F {:?} {:?}", packet.pts(), packet.dts());

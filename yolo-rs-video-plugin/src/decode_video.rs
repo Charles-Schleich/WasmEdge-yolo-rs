@@ -1,13 +1,12 @@
-use ffmpeg::{
+use ffmpeg_next::{
     codec, dictionary, encoder,
     format::{input, Pixel},
     frame,
     media::Type,
     software::scaling::{context::Context, flag::Flags},
     util::frame::video::Video,
+    Error as FFmpegError,
 };
-
-use ffmpeg::Error as FFmpegError;
 
 use log::debug;
 
@@ -27,7 +26,7 @@ impl From<FFmpegError> for VideoDecoderError {
 }
 
 pub fn dump_frames(filename: &String) -> Result<(Frames, VideoInfo), VideoDecoderError> {
-    ffmpeg::init()?;
+    ffmpeg_next::init()?;
 
     let mut frame_index = 0;
     let mut frames = Vec::new();
@@ -42,17 +41,20 @@ pub fn dump_frames(filename: &String) -> Result<(Frames, VideoInfo), VideoDecode
 
     match input {
         Ok(mut ictx) => {
-            let input = ictx
+            
+            let input: ffmpeg_next::Stream = ictx
                 .streams()
                 .best(Type::Video)
-                .ok_or(ffmpeg::Error::StreamNotFound)?;
+                .ok_or(ffmpeg_next::Error::StreamNotFound)?;
+            
             itcx_number_streams = ictx.nb_streams();
 
             let video_stream_index: usize = input.index();
 
             input_stream_meta_data = ictx.metadata().to_owned();
-
-            let mut decoder = input.decoder()?.video()?;
+            
+            let context_decoder = ffmpeg_next::codec::context::Context::from_parameters(input.parameters())?;
+            let mut decoder = context_decoder.decoder().video()?;
 
             codec = encoder::find(codec::Id::H264).ok_or(VideoDecoderError::CodecError(
                 "Could not Find Codec h264".into(),
@@ -88,17 +90,23 @@ pub fn dump_frames(filename: &String) -> Result<(Frames, VideoInfo), VideoDecode
 
             // Closure to process out frames
             let mut receive_and_process_decoded_frames =
-                |decoder: &mut ffmpeg::decoder::Video| -> Result<(), ffmpeg::Error> {
-                    let mut decoded_frame = frame::Video::empty();
+                |decoder: &mut ffmpeg_next::decoder::Video| -> Result<(), ffmpeg_next::Error> {
+                    // 
+                    let mut decoded_frame: frame::Video = frame::Video::empty();
+                    // 
                     while decoder.receive_frame(&mut decoded_frame).is_ok() {
-                        let mut rgb_frame = Video::empty();
+                        // 
+                        let mut rgb_frame: frame::Video = Video::empty();
+                        // 
                         scaler.run(&decoded_frame, &mut rgb_frame)?;
+                        // 
+
                         debug!(
-                            "R_Frame {frame_index} : {:?} {:?} {:?} {:?} ",
+                            "R_Frame {frame_index} : {:?} {:?} ",
                             decoded_frame.kind(),
                             decoded_frame.timestamp(),
-                            decoded_frame.duration(),
-                            decoded_frame.display_number()
+                            // decoded_frame.duration(),
+                            // decoded_frame.display_number()
                         );
 
                         let frame_map = FrameMap {
@@ -116,7 +124,7 @@ pub fn dump_frames(filename: &String) -> Result<(Frames, VideoInfo), VideoDecode
 
             // Iterator over Input Context Packets
             for (idx, res) in ictx.packets().enumerate() {
-                let (stream, packet) = res?;
+                let (stream, packet) = res;
                 if stream.index() == video_stream_index {
                     debug!("PKT {idx} PTS{:?}   DTS:{:?}", packet.pts(), packet.dts());
                     decoder.send_packet(&packet)?;

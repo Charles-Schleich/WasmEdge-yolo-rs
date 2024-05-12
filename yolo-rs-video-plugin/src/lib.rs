@@ -4,7 +4,7 @@ mod decode_video;
 mod encode_video;
 mod time;
 
-use ffmpeg::{
+use ffmpeg_next::{
     dictionary,
     format::Pixel,
     frame,
@@ -46,7 +46,7 @@ pub struct VideoInfo {
     pub height: Height,
     pub aspect_ratio: AspectRatio,
     pub frame_rate: FrameRate,
-    pub input_stream_meta_data: dictionary::Owned,
+    pub input_stream_meta_data: dictionary::Owned<'static>, // TODO: Remove static, Add lifetime to VideoInfo
     pub itcx_number_streams: u32,
     pub bitrate: BitRate,
     pub max_bitrate: MaxBitRate,
@@ -77,7 +77,7 @@ impl VideoInfo {
         height: Height,
         aspect_ratio: AspectRatio,
         frame_rate: FrameRate,
-        input_stream_meta_data: dictionary::Owned,
+        input_stream_meta_data: dictionary::Owned<'static>, // TODO change this
         itcx_number_streams: u32,
         bitrate: BitRate,
         max_bitrate: MaxBitRate,
@@ -320,7 +320,7 @@ fn write_frame(
     );
 
     let mut video_frame = frame::Video::new(
-        ffmpeg::format::Pixel::RGB24,
+        ffmpeg_next::format::Pixel::RGB24,
         video_info.width.0,
         video_info.height.0,
     );

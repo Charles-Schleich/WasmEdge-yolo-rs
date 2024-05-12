@@ -12,9 +12,14 @@ log = "0.4.20"
 wasmedge-sdk = { version = "=0.12.1", features = ["ffi", "standalone"] }
 wasmedge-sys = { version = "=0.17.2" }
 
-ffmpeg = { version = "0.6.0", features = [
-    "ffmpeg_5_0",
-], git = "https://github.com/meh/rust-ffmpeg" }
+# ffmpeg = { version = "0.6.0", features = [
+#     "ffmpeg_6_0",
+# ], git = "https://github.com/meh/rust-ffmpeg" }
+
+# TODO: Use FFMPEG Next
+# ffmpeg-next = "7.0.0"
+ffmpeg-next = { version = "7.0.0" }
+
 image = { version = "0.24.7", default-features = false, features = [
     "gif",
     "jpeg",

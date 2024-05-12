@@ -1,11 +1,11 @@
-extern crate ffmpeg;
+extern crate ffmpeg_next;
 
-use ffmpeg::util::mathematics::rescale::{Rescale, TIME_BASE};
+use ffmpeg_next::util::mathematics::rescale::{Rescale, TIME_BASE};
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Time {
-    time_base: ffmpeg::Rational,
+    time_base: ffmpeg_next::Rational,
     time: Option<i64>,
 }
 
@@ -38,7 +38,7 @@ impl Time {
         self.time
     }
 
-    pub(crate) fn aligned_with_rational(&self, time_base: ffmpeg::Rational) -> Time {
+    pub(crate) fn aligned_with_rational(&self, time_base: ffmpeg_next::Rational) -> Time {
         Time {
             time: self
                 .time
@@ -59,7 +59,7 @@ impl From<Duration> for Time {
 pub struct Aligned {
     lhs: Option<i64>,
     rhs: Option<i64>,
-    time_base: ffmpeg::Rational,
+    time_base: ffmpeg_next::Rational,
 }
 
 impl Aligned {
