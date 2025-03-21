@@ -1,5 +1,5 @@
 use clap::Parser;
-use log::LevelFilter;
+use log::{info, LevelFilter};
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
 use yolo_rs::{utils, ConfThresh, DrawBoundingBoxes, IOUThresh, Yolo, YoloBuilder};
 
@@ -25,9 +25,9 @@ struct Args {
 
 pub fn main() {
     let args = Args::parse();
-    println!("model_bin_name {}", args.model_path);
-    println!("input_video_path {}", args.input_video_path);
-    println!("output_video_path {}", args.output_video_path);
+    info!("model_bin_name    : {}", args.model_path);
+    info!("input_video_path  : {}", args.input_video_path);
+    info!("output_video_path : {}", args.output_video_path);
 
     CombinedLogger::init(vec![TermLogger::new(
         LevelFilter::Info,
@@ -38,6 +38,8 @@ pub fn main() {
     .unwrap();
 
     // Create YOLO instance
+    println!("output_video_path {}", args.output_video_path);
+
     let yolo: Yolo = YoloBuilder::new()
         .classes_file(args.class_names_path)
         .unwrap()
@@ -46,6 +48,7 @@ pub fn main() {
 
     let conf_thresh = ConfThresh(0.5);
     let iou_thresh = IOUThresh(0.5);
+    println!("conf,iou {:?},{:?}", conf_thresh, iou_thresh);
 
     let video_results = yolo
         .infer_video(

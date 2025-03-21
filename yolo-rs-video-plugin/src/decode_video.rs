@@ -41,32 +41,35 @@ pub fn dump_frames(filename: &String) -> Result<(Frames, VideoInfo), VideoDecode
 
     match input {
         Ok(mut ictx) => {
-            
             let input: ffmpeg_next::Stream = ictx
                 .streams()
                 .best(Type::Video)
-                .ok_or(ffmpeg_next::Error::StreamNotFound)?;
-            
+                .ok_or(FFmpegError::StreamNotFound)?;
+
             itcx_number_streams = ictx.nb_streams();
 
             let video_stream_index: usize = input.index();
 
             input_stream_meta_data = ictx.metadata().to_owned();
-            
-            let context_decoder = ffmpeg_next::codec::context::Context::from_parameters(input.parameters())?;
+
+            let context_decoder =
+                ffmpeg_next::codec::context::Context::from_parameters(input.parameters())?;
             let mut decoder = context_decoder.decoder().video()?;
 
-            codec = encoder::find(codec::Id::H264).ok_or(VideoDecoderError::CodecError(
-                "Could not Find Codec h264".into(),
-            ))?;
+            codec = ffmpeg_next::decoder::find(codec::Id::H264).ok_or(
+                VideoDecoderError::CodecError(
+                    // codec = encoder::find(codec::Id::H264).ok_or(VideoDecoderError::CodecError(
+                    "Could not Find Codec h264".into(),
+                ),
+            )?;
 
-            debug!("Decoder Codec");
-            debug!("  BitRate {:?}", decoder.bit_rate());
-            debug!("  MaxBitRate {:?}", decoder.max_bit_rate());
-            debug!("  TimeBase {:?}", decoder.time_base());
-            debug!("  Codec");
-            debug!("      Name  {:?}", codec.name());
-            debug!("      Descr {:?}", codec.description());
+            println!("Decoder Codec");
+            println!("  BitRate {:?}", decoder.bit_rate());
+            println!("  MaxBitRate {:?}", decoder.max_bit_rate());
+            println!("  TimeBase {:?}", decoder.time_base());
+            println!("  Codec");
+            println!("      Name  {:?}", codec.name());
+            println!("      Descr {:?}", codec.description());
 
             // I am wrapping these in Structs so its less likely that I make Type Errors
             bitrate = BitRate(decoder.bit_rate());
@@ -91,15 +94,15 @@ pub fn dump_frames(filename: &String) -> Result<(Frames, VideoInfo), VideoDecode
             // Closure to process out frames
             let mut receive_and_process_decoded_frames =
                 |decoder: &mut ffmpeg_next::decoder::Video| -> Result<(), ffmpeg_next::Error> {
-                    // 
+                    //
                     let mut decoded_frame: frame::Video = frame::Video::empty();
-                    // 
+                    //
                     while decoder.receive_frame(&mut decoded_frame).is_ok() {
-                        // 
+                        //
                         let mut rgb_frame: frame::Video = Video::empty();
-                        // 
+                        //
                         scaler.run(&decoded_frame, &mut rgb_frame)?;
-                        // 
+                        //
 
                         debug!(
                             "R_Frame {frame_index} : {:?} {:?} ",

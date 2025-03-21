@@ -4,12 +4,11 @@
 # █████   █████   ██ ████ ██ ██████  █████   ██   ███ 
 # ██      ██      ██  ██  ██ ██      ██      ██    ██ 
 # ██      ██      ██      ██ ██      ███████  ██████  
-FROM ubuntu:22.04 as ffmpeg
+FROM ubuntu:24.04 as ffmpeg
 
-RUN apt-get update
-
-RUN DEBIAN_FRONTEND=noninteractive \
-  && apt-get install -y build-essential wget curl clang pkg-config yasm  \
+RUN apt-get clean
+RUN rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get -y install  build-essential wget curl clang pkg-config yasm  \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /ffmpeg/

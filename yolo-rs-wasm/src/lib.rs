@@ -116,6 +116,7 @@ const OUTPUT_CLASSES: usize = 80;
 const OUTPUT_OBJECTS: usize = 8400;
 
 /// Struct to hold Confidence Threshold f32
+#[derive(Debug)]
 pub struct ConfThresh(pub f32);
 
 impl ConfThresh {
@@ -125,6 +126,7 @@ impl ConfThresh {
 }
 
 /// struct to hold floating point value for Intersection over Union
+#[derive(Debug)]
 pub struct IOUThresh(pub f32);
 
 impl IOUThresh {
@@ -145,10 +147,6 @@ impl Yolo {
         let image_bytes: Vec<u8> = fs::read(path)?;
         Ok(image::load_from_memory(&image_bytes)?.to_rgb8())
     }
-
-    // pub fn font(self) -> Font<'static> {
-    //     self.font
-    // }
 
     pub fn infer_file<P: AsRef<Path>>(
         self,
@@ -211,7 +209,7 @@ impl Yolo {
                 }
             };
 
-        yolo_rs_video_plugin::init_plugin_logging_with_log_level(LevelFilter::Info);
+        yolo_rs_video_plugin::init_plugin_logging_with_log_level(LevelFilter::Debug);
 
         let (mut width, mut height, mut frame_count): (i32, i32, i32) = (0, 0, 10);
         let width_ptr = std::ptr::addr_of_mut!(width);

@@ -10,7 +10,7 @@ use ffmpeg_next::{
     Dictionary, Error as FFmpegError, Packet, Rational,
 };
 
-use log::{debug, error, warn};
+use log::{debug, error, info, warn};
 
 use std::collections::BTreeMap;
 
@@ -43,45 +43,61 @@ pub(crate) struct VideoEncoder {
 
 impl VideoEncoder {
     pub fn new(v_info: &VideoInfo, output_file: &String) -> Result<Self, VideoEncoderError> {
+        info!(" 1 ");
         let mut octx = format::output(output_file)?;
-
+        info!(" 2 ");
         let global_header = octx.format().flags().contains(format::Flags::GLOBAL_HEADER);
-        //
-        let codec = ffmpeg_next::encoder::find(codec::Id::H264).ok_or(
+        info!(" 3 "); //
+        let codec: ffmpeg_next::Codec = ffmpeg_next::encoder::find(codec::Id::H264).ok_or(
             VideoEncoderError::CodecError("Could not Find Codec h264".into()),
         )?;
-        //
+
+        println!("Encoder Codec");
+        println!("  Codec");
+        println!("      Name  {:?}", codec.name());
+        println!("      Descr {:?}", codec.description());
+        println!("      Descr {:?}", codec.is_video());
+        println!("      Descr {:?}", codec.is_audio());
+
+        info!(" 4 "); //
         let mut ost: ffmpeg_next::StreamMut<'_> = octx.add_stream(codec)?;
+        println!("{:?}", ost.metadata());
+
+        info!(" 5 "); //
+        let mut encoder = ffmpeg_next::codec::context::Context::new_with_codec(codec)
+            .encoder()
+            .video()?;
+        // let mut encoder = ffmpeg_next::codec::encoder::new().video()?;
         //
-        let mut encoder = ffmpeg_next::codec::encoder::new().video()?;
-        //
+        ost.set_parameters(&encoder);
         encoder.set_height(v_info.height.0);
         encoder.set_width(v_info.width.0);
         encoder.set_format(v_info.format);
-        encoder.set_time_base(ffmpeg_next::rescale::TIME_BASE);
         encoder.set_frame_rate(v_info.frame_rate.0);
+        encoder.set_time_base(ffmpeg_next::rescale::TIME_BASE);
 
-        // Keeping the Bit Rate VERY high to not loose information
+        // Keeping the Bit Rate VERY high to not lose information
         let bitrate_uncompressed = (3 * 8 * v_info.height.0 * v_info.width.0) as usize;
         encoder.set_bit_rate(bitrate_uncompressed / 2);
-
+        info!(" 7 ");
         let mut dict = Dictionary::new();
         dict.set("preset", "slow");
         // dict.set("preset", "medium");
-
-        let mut encoder: AVEncoder = encoder.open_with(dict)?;
-
-        let params: Parameters = ffmpeg_next::codec::parameters::Parameters::new();
-        // TODO: what ? :)
-        ost.set_parameters(params);
+        info!(" 8 ");
+        let mut encoder: AVEncoder = encoder.open_as_with(codec, dict)?;
+        info!(" 9 ");
+        // let params: Parameters = ffmpeg_next::codec::parameters::Parameters::new();
+        // ost.set_parameters(params);
 
         if global_header {
             encoder.set_flags(codec::Flags::GLOBAL_HEADER);
         }
+        info!(" 10 ");
 
         octx.set_metadata(v_info.input_stream_meta_data.clone());
         format::context::output::dump(&octx, 0, Some(output_file));
         octx.write_header()?;
+        info!(" 11 ");
 
         // Write Every Frame out to encoder packet
         let scaler = Scaler::get(
@@ -93,6 +109,7 @@ impl VideoEncoder {
             v_info.height.0,
             Flags::empty(),
         )?;
+        info!(" 12 ");
 
         encoder.set_threading(codec::threading::Config {
             kind: codec::threading::Type::None,
@@ -140,7 +157,7 @@ impl VideoEncoder {
 
         let mut position = Time::zero();
 
-        for (_idx, (out_frame_rgb, _frame_type, _)) in frames.iter_mut().enumerate() {
+        for (out_frame_rgb, _frame_type, _) in frames.iter_mut() {
             let frame_timestamp_rescale = position
                 .aligned_with_rational(self.encoder.time_base())
                 .into_value();
@@ -154,16 +171,11 @@ impl VideoEncoder {
             // If the bit rate is set to (Single Frame Byte amount) * number of Frames
             frame_yuv420.set_kind(picture::Type::I);
 
-            debug!(
-                "F Send {:?}",
-                frame_yuv420.pts(),
-                // frame_yuv420.display_number()
-
-            );
+            debug!("F Send {:?}", frame_yuv420.pts(),);
             self.encoder.send_frame(&frame_yuv420)?;
 
             if let Some(mut packet) = self.encoder_receive_packet()? {
-                // Leaving this here should i want to try reorder the packets again in the futue
+                // Leaving this here should i want to try reorder the packets again in the future
                 // self.packet_order_map.insert(packet.pts().unwrap(), packet);
                 self.write_encoded_packets(&mut packet, 0);
             }
@@ -176,7 +188,7 @@ impl VideoEncoder {
         // while let Some((k, mut packet)) = self.packet_order_map.pop_first() {
         //     debug!("Writing Packet {:?}", k);
         //     self.write_encoded_packets(&mut packet, 0);
-        // }https://www.youtube.com/watch?v=alrFbY5vxt4
+        // }
 
         self.finish()?;
 
@@ -239,8 +251,7 @@ impl VideoEncoder {
         );
 
         packet.rescale_ts(
-            self.encoder
-                .time_base(),
+            self.encoder.time_base(),
             // TODO: Will Defaulting to TIME_BASE cause a potential source of errors here ?
             self.octx
                 .stream(0)

@@ -22,7 +22,7 @@ use wasmedge_sdk::{
 
 use std::fmt::Debug;
 
-use log::{debug, error, LevelFilter};
+use log::{debug, error, info, LevelFilter};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Width(pub u32);
@@ -126,6 +126,7 @@ fn init_plugin_logging(
         _ => LevelFilter::Trace,
     };
 
+    println!("Init Plugin Logging level {log_level:?}");
     if let Err(err) = CombinedLogger::init(vec![TermLogger::new(
         log_level,
         Config::default(),
@@ -134,6 +135,8 @@ fn init_plugin_logging(
     )]) {
         eprintln!("Could not Initialize Plugin Logging {}", err);
     };
+
+    log::info!("Logging Initialized");
 
     return Ok(vec![WasmValue::from_i32(0)]);
 }
@@ -199,15 +202,16 @@ fn load_video_to_host_memory(
 
     let res = match decode_video::dump_frames(&filename) {
         Ok((frames, video_info)) => {
-            debug!("Input Frame Count {}", frames.len());
+            println!("Input Frame Count {}", frames.len());
             if frames.is_empty() {
+                error!("Video file {} contained No Frames", filename);
+                println!("Video file {} contained No Frames", filename);
+                return Err(HostFuncError::User(1));
+            } else {
                 unsafe {
                     *width_ptr_main_memory = frames[0].input_frame.width();
                     *height_ptr_main_memory = frames[0].input_frame.height();
                 }
-            } else {
-                error!("Video file {} contained No Frames", filename);
-                return Err(HostFuncError::User(1));
             }
 
             let mut vid_gaurd = data_guard;
@@ -351,7 +355,8 @@ fn assemble_output_frames_to_video(
     args: Vec<WasmValue>,
     data: &mut Arc<Mutex<FramesMap>>,
 ) -> Result<Vec<WasmValue>, HostFuncError> {
-    debug!("assemble_video");
+    info!("assemble_video");
+
     let mut data_guard = match data.lock() {
         Ok(x) => x,
         Err(err) => {
@@ -360,8 +365,10 @@ fn assemble_output_frames_to_video(
         }
     };
 
+    info!("Main Memory");
     let mut main_memory = caller.memory(0).ok_or(HostFuncError::Runtime(1))?;
 
+    info!("Filename");
     let filename_ptr = args[0].to_i32();
     let filename_len = args[1].to_i32();
     let filaname_capacity = args[2].to_i32();
@@ -389,12 +396,12 @@ fn assemble_output_frames_to_video(
 
     // Check Frames have all been Written
     // Save Indexes of frames that have not been written
+    info!("ennumerate frames");
     let (mut frames, missing_frames) = frames.iter_mut().enumerate().fold(
         (Vec::new(), Vec::new()),
         |(mut iter_frames, mut iter_missing), (idx, frame_map)| {
             match frame_map.output_frame.as_mut() {
                 Some(fr) => {
-                    // TODO REMOVE CLONE
                     iter_frames.push((fr.clone(), frame_map.frame_type, frame_map.timestamp))
                 }
                 None => iter_missing.push(idx),
@@ -403,14 +410,17 @@ fn assemble_output_frames_to_video(
         },
     );
 
-    if missing_frames.is_empty() {
+    if !missing_frames.is_empty() {
         error!("Error Missing Frames {:?} ", missing_frames);
         return Err(HostFuncError::User(1));
     }
 
+    info!("Video Encoder");
+    println!("{video_info:?}{output_file}");
     let mut video_encoder = encode_video::VideoEncoder::new(video_info, &output_file)
         .map_err(|_| HostFuncError::User(1))?;
 
+    info!("receive_and_process_decoded_frames");
     if let Err(err) = video_encoder.receive_and_process_decoded_frames(&mut frames) {
         error!("Encode stream Error {:?}", err);
     };
